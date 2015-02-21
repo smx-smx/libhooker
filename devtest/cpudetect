@@ -1,0 +1,11 @@
+#if MSVC
+#ifdef _M_X86
+#define ARCH_X86
+#endif
+#endif
+
+#if GCC
+#ifdef __i386__
+#define ARCH_X86
+#endif
+#endif
