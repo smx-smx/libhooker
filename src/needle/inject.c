@@ -548,6 +548,8 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 		for (idx = 0; idx < sizeof(stack) / sizeof(uintptr_t); ++idx) {
 			if ((rc = inj_peekdata(lh->proc.pid, lh_rget_sp(&iregs) + idx * sizeof(size_t), &stack[idx])) != LH_SUCCESS)
 				break;
+			if ((rc = inj_pokedata(lh->proc.pid, lh_rget_sp(&iregs) + idx * sizeof(size_t), (uintptr_t)0)) != LH_SUCCESS)
+				break;
 		}
 		if (rc < 0){
 			break; //something went wrong

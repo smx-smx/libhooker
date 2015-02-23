@@ -30,18 +30,7 @@
  */
 
 #include "inject.h"
-
-#if __WORDSIZE == 64
-typedef Elf64_Ehdr Elf_Ehdr;
-typedef Elf64_Phdr Elf_Phdr;
-typedef Elf64_Shdr Elf_Shdr;
-typedef Elf64_Sym Elf_Sym;
-#else
-typedef Elf32_Ehdr Elf_Ehdr;
-typedef Elf32_Phdr Elf_Phdr;
-typedef Elf32_Shdr Elf_Shdr;
-typedef Elf32_Sym Elf_Sym;
-#endif
+#include "elf_types.h"
 
 enum {
 	HOTPATCH_SYMBOL_TYPE,
