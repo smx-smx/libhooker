@@ -42,6 +42,7 @@ inline int inj_trap(pid_t pid, struct user *iregs) {
 	LH_VERBOSE(3, "Copying Null to stack.");
 	return inj_pokedata(pid, lh_rget_sp(iregs), nullcode);
 }
+
 int inj_pass_args2func(struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2) {
 	LH_VERBOSE(3, "function address is: 0x" LX, FN);
 	LH_VERBOSE(3, "Copying Arg 1 to stack.");
@@ -54,28 +55,47 @@ int inj_pass_args2func(struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr
 		return rc;
 
 	inj_rset_ip(iregs, fn);
-inj_rset_ax(iregs, 0; return LH_SUCCESS;}
+	inj_rset_ax(iregs, 0; return LH_SUCCESS;
+}
 
-			inline void inj_rset_ip(struct user *r, uintptr_t value) {
-			r->regs.eip = value;}
+inline void inj_rset_ip(struct user *r, uintptr_t value) {
+	r->regs.eip = value;
+}
 
-			inline uintptr_t inj_rget_ip(struct user *r) {
-			return r->regs.eip;}
+inline uintptr_t inj_rget_ip(struct user *r) {
+	return r->regs.eip;
+}
 
-			inline void inj_rset_sp(struct user *r, uintptr_t value) {
-			r->regs.esp = value;}
+inline void inj_rset_sp(struct user *r, uintptr_t value) {
+	r->regs.esp = value;
+}
 
-			inline uintptr_t inj_rget_sp(struct user *r) {
-			return r->regs.esp;}
+inline uintptr_t inj_rget_sp(struct user *r) {
+	return r->regs.esp;
+}
 
-			inline void inj_rset_ax(struct user *r, uintptr_t value) {
-			r->regs.eax = value;}
+inline void inj_rset_ax(struct user *r, uintptr_t value) {
+	r->regs.eax = value;
+}
 
-			inline uintptr_t inj_rget_ax(struct user *r) {
-			return r->regs.eax;}
+inline uintptr_t inj_rget_ax(struct user *r) {
+	return r->regs.eax;
+}
 
-			inline int inj_redzone() {
-			return 0;}
+inline int inj_redzone() {
+	return 0;
+}
 
-			void lh_dump_regs(struct user *r) {
-			LH_VERBOSE(3, "--------------------------- i386"); LH_VERBOSE(3, "%%eip : 0x" LX, r->regs.eip); LH_VERBOSE(3, "%%eax : 0x" LX, r->regs.eax); LH_VERBOSE(3, "%%ebx : 0x" LX, r->regs.ebx); LH_VERBOSE(3, "%%ecx : 0x" LX, r->regs.ecx); LH_VERBOSE(3, "%%edx : 0x" LX, r->regs.edx); LH_VERBOSE(3, "%%esi : 0x" LX, r->regs.esi); LH_VERBOSE(3, "%%edi : 0x" LX, r->regs.edi); LH_VERBOSE(3, "%%ebp : 0x" LX, r->regs.ebp); LH_VERBOSE(3, "%%oeax: 0x" LX, r->regs.orig_eax); LH_VERBOSE(3, "%%esp : 0x" LX, r->regs.esp);}
+void lh_dump_regs(struct user *r) {
+	LH_VERBOSE(3, "--------------------------- i386");
+	LH_VERBOSE(3, "%%eip : 0x" LX, r->regs.eip);
+	LH_VERBOSE(3, "%%eax : 0x" LX, r->regs.eax);
+	LH_VERBOSE(3, "%%ebx : 0x" LX, r->regs.ebx);
+	LH_VERBOSE(3, "%%ecx : 0x" LX, r->regs.ecx);
+	LH_VERBOSE(3, "%%edx : 0x" LX, r->regs.edx);
+	LH_VERBOSE(3, "%%esi : 0x" LX, r->regs.esi);
+	LH_VERBOSE(3, "%%edi : 0x" LX, r->regs.edi);
+	LH_VERBOSE(3, "%%ebp : 0x" LX, r->regs.ebp);
+	LH_VERBOSE(3, "%%oeax: 0x" LX, r->regs.orig_eax);
+	LH_VERBOSE(3, "%%esp : 0x" LX, r->regs.esp);
+}

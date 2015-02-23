@@ -96,24 +96,29 @@ int main(int argc, char *argv[]) {
 		if (LH_SUCCESS != (re = parse_opts(argc, argv)))
 			break;
 
+		//create a new session object
 		lh_session_t *session = lh_alloc();
 		if (session == NULL) {
 			re = -6;
 			break;
 		}
-
+		
+		//start tracking the pid specified by the user
 		if (LH_SUCCESS != (re = lh_attach(session, g_pid)))
 			break;
 
 		int i;
 		for (i = g_libraries; i < argc; i++) {
+			//inject the libraries specified by the user
 			if (LH_SUCCESS != (re = lh_inject_library(session, argv[i], NULL))) {
 				break;
 			}
 		}
 
+		//detach from the process
 		re |= lh_detach(session);
 
+		//free the session object
 		lh_free(&session);
 
 	} while (0);

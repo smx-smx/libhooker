@@ -41,27 +41,28 @@ lh_hook_t hook_settings = {
 	.version = 1,
 	.autoinit_pre = hooked_autoinit,
 	.autoinit_post = hooked_autoinit_post,
-	.fn_hooks = {
-
-				 {
-				  .hook_kind = LHM_FN_HOOK_BY_NAME,
-				  .libname = "",	// means the fn symbol should be defined in the main executable
-				  .symname = "otherfunction",
-				  .hook_fn = (uintptr_t) hooked_otherfunction,
-				  .orig_function_ptr = 0,
-				  .opcode_bytes_to_restore = 8}
-				 ,
-				 {
-				  .hook_kind = LHM_FN_HOOK_BY_NAME,
-				  .libname = "",
-				  .symname = "testfunction",
-				  .hook_fn = (uintptr_t) hooked_testfunction,
-				  .orig_function_ptr = (uintptr_t) & original_test_function,
-				  .opcode_bytes_to_restore = 8}
-				 ,
-				 {
-				  .hook_kind = LHM_FN_HOOK_TRAILING}
-				 }
+	.fn_hooks =
+	{
+		{
+			.hook_kind = LHM_FN_HOOK_BY_NAME,
+			.libname = "",	// means the fn symbol should be defined in the main executable
+			.symname = "otherfunction",
+			.hook_fn = (uintptr_t) hooked_otherfunction,
+			.orig_function_ptr = 0,
+			.opcode_bytes_to_restore = 8
+		},
+		{
+			.hook_kind = LHM_FN_HOOK_BY_NAME,
+			.libname = "",
+			.symname = "testfunction",
+			.hook_fn = (uintptr_t) hooked_testfunction,
+			.orig_function_ptr = (uintptr_t) & original_test_function, //save the original function address to "original_test_function"
+			.opcode_bytes_to_restore = 8
+		},
+		{
+			.hook_kind = LHM_FN_HOOK_TRAILING
+		}
+	}
 };
 
 /*
