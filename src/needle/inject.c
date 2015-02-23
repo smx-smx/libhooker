@@ -195,7 +195,7 @@ static int inj_get_regs(pid_t pid, struct user *regs) {
 		return -1;
 	memset(regs, 0, sizeof(*regs));
 	if (ptrace(PTRACE_GETREGS, pid, NULL, regs) < 0) {
-		LH_ERROR("Ptrace Getregs failed");
+		LH_ERROR_SE("Ptrace Getregs failed");
 		return -1;
 	}
 	return LH_SUCCESS;
@@ -208,7 +208,7 @@ static int inj_set_regs(pid_t pid, const struct user *regs) {
 	if (!regs)
 		return -1;
 	if (ptrace(PTRACE_SETREGS, pid, NULL, regs) < 0) {
-		LH_ERROR("Ptrace Setregs failed");
+		LH_ERROR_SE("Ptrace Setregs failed");
 		return -1;
 	}
 	return LH_SUCCESS;
@@ -248,6 +248,10 @@ int lh_attach(lh_session_t * session, pid_t pid) {
 			re = -2;
 			break;
 		}
+
+		LH_VERBOSE(2, "Waiting...");
+		if (LH_SUCCESS != inj_wait(session->proc.pid))
+			break;
 
 		// make a copy of the registers at attach time and store them in the session
 		if (LH_SUCCESS != (re = inj_get_regs(pid, &(session->original_regs))))
@@ -571,6 +575,10 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 		// Get the dlopen result
 		result = lh_rget_ax(&iregs);
 		LH_VERBOSE(1, "Dll opened at 0x" LX, result);
+		if(!result){
+			LH_ERROR("dlopen failed: pathname %s cannot be found\n", heap);
+			break;
+		}
 		if (out_libaddr)
 			*out_libaddr = result;
 
