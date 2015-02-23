@@ -541,7 +541,6 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 		/* We're now going to call malloc to allocate the path of the library we want to load */
 
 		// Pause the process
-		// TODO: shouldn't this be done before copying stack and registers out?
 		if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
 			break;
 		// Encode call to malloc
