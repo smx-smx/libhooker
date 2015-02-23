@@ -188,21 +188,6 @@ static int inj_wait(pid_t pid) {
 }
 
 /*
- * Returns success if the process is stopped
- */
-static int inj_isstopped(pid_t pid){
-	int status = 0;
-	if (waitpid(pid, &status, WNOHANG) < 0) {
-		LH_ERROR("Waitpid failed");
-		return -1;
-	}
-	if(WIFSTOPPED(status)){
-		return LH_SUCCESS;
-	}
-	return -1;
-}
-
-/*
  * Fetches and returns the registers of the tracked pid
  */
 static int inj_get_regs(pid_t pid, struct user *regs) {
@@ -558,11 +543,8 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 		/* We're now going to call malloc to allocate the path of the library we want to load */
 
 		// Pause the process
-		if(!inj_isstopped(lh->proc.pid)){
-			LH_VERBOSE(2, "Stopping...");
-			if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
-				break;
-		}
+		if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
+			break;
 		// Encode call to malloc
 		if ((rc = inj_pass_args2func(&iregs, lh->fn_malloc, tgtsz, 0)) != LH_SUCCESS)
 			break;
@@ -573,6 +555,10 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 		lh_dump_regs(&iregs);
 		// Get the malloc result
 		heap = result = lh_rget_ax(&iregs);
+		if(!result){
+			LH_ERROR("malloc failed!\n");
+			break;
+		}
 
 		// Copy the path to the target process
 		LH_VERBOSE(2, "Copying " LU " bytes to 0x" LX, tgtsz, result);
