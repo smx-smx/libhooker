@@ -4,14 +4,13 @@
  */
 
 #ifndef __HOOKER_NJECT_H
-#define __HOOKER_NJECT_H
+#    define __HOOKER_NJECT_H
 
-#include <stdlib.h> 
-#include <fcntl.h>
-#include <elf.h>
-#include <stdbool.h>
-#include "lh_common.h"
-
+#    include <stdlib.h>
+#    include <fcntl.h>
+#    include <elf.h>
+#    include <stdbool.h>
+#    include "lh_common.h"
 
 enum {
 	HOTPATCH_LIB_LD = 0,
@@ -37,10 +36,10 @@ enum elf_bit {
 };
 
 struct elf_symbol {
-	char *name; /* null terminated symbol name */
-	uintptr_t address; /* address at which it is available */
-	int type; /* type of symbol */
-	size_t size; /* size of the symbol if available */
+	char *name;					/* null terminated symbol name */
+	uintptr_t address;			/* address at which it is available */
+	int type;					/* type of symbol */
+	size_t size;				/* size of the symbol if available */
 };
 
 struct elf_interp {
@@ -49,44 +48,34 @@ struct elf_interp {
 	uintptr_t ph_addr;
 };
 
-
-
 struct ld_procmaps {
-    uintptr_t addr_begin;
-    uintptr_t addr_end;
-    bool addr_valid;
-    int permissions;
-    off_t offset;
-    int device_major;
-    int device_minor;
-    ino_t inode;
-    char *pathname;
-    size_t pathname_sz;
-    int filetype;
-    uintptr_t mmap;
-    uintptr_t mmap_begin;
-    uintptr_t mmap_end;
+	uintptr_t addr_begin;
+	uintptr_t addr_end;
+	bool addr_valid;
+	int permissions;
+	off_t offset;
+	int device_major;
+	int device_minor;
+	ino_t inode;
+	char *pathname;
+	size_t pathname_sz;
+	int filetype;
+	uintptr_t mmap;
+	uintptr_t mmap_begin;
+	uintptr_t mmap_end;
 };
 
+struct elf_symbol *exe_load_symbols(const char *filename, size_t * sym_count, uintptr_t * entry_point, struct elf_interp *interp, enum elf_bit *is64);
 
-
-struct elf_symbol *exe_load_symbols(const char *filename, 
-										size_t *sym_count,
-										uintptr_t *entry_point,
-										struct elf_interp *interp,
-										enum elf_bit *is64);
-
-struct ld_procmaps *ld_load_maps(pid_t pid, size_t *num);
+struct ld_procmaps *ld_load_maps(pid_t pid, size_t * num);
 
 void ld_free_maps(struct ld_procmaps *, size_t num);
 
 /* the full path of the library needs to be given. */
-int ld_find_library(struct ld_procmaps *, const size_t num,
-					const char *libpath, bool inode_match,
-					struct ld_procmaps **lib);
+int ld_find_library(struct ld_procmaps *, const size_t num, const char *libpath, bool inode_match, struct ld_procmaps **lib);
 
 /* finds the address of the symbol in the library if it exists */
-uintptr_t ld_find_address(const struct ld_procmaps *lib, const char *symbol, size_t* size);
+uintptr_t ld_find_address(const struct ld_procmaps *lib, const char *symbol, size_t * size);
 
 int elf_symbol_cmpqsort(const void *p1, const void *p2);
 

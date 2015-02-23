@@ -35,190 +35,179 @@
 #include "inject.h"
 
 enum {
-    PROCMAPS_PERMS_NONE		= 0x0,
-    PROCMAPS_PERMS_READ		= 0x1,
-    PROCMAPS_PERMS_EXEC		= 0x2,
-    PROCMAPS_PERMS_WRITE	= 0x4,
-    PROCMAPS_PERMS_PRIVATE  = 0x8,
-	PROCMAPS_PERMS_SHARED   = 0x10
+	PROCMAPS_PERMS_NONE = 0x0,
+	PROCMAPS_PERMS_READ = 0x1,
+	PROCMAPS_PERMS_EXEC = 0x2,
+	PROCMAPS_PERMS_WRITE = 0x4,
+	PROCMAPS_PERMS_PRIVATE = 0x8,
+	PROCMAPS_PERMS_SHARED = 0x10
 };
 
 enum {
-    PROCMAPS_FILETYPE_UNKNOWN,
-    PROCMAPS_FILETYPE_EXE,
-    PROCMAPS_FILETYPE_LIB,
-    PROCMAPS_FILETYPE_DATA,
-    PROCMAPS_FILETYPE_VDSO,
-    PROCMAPS_FILETYPE_HEAP,
-    PROCMAPS_FILETYPE_STACK,
-    PROCMAPS_FILETYPE_SYSCALL
+	PROCMAPS_FILETYPE_UNKNOWN,
+	PROCMAPS_FILETYPE_EXE,
+	PROCMAPS_FILETYPE_LIB,
+	PROCMAPS_FILETYPE_DATA,
+	PROCMAPS_FILETYPE_VDSO,
+	PROCMAPS_FILETYPE_HEAP,
+	PROCMAPS_FILETYPE_STACK,
+	PROCMAPS_FILETYPE_SYSCALL
 };
 
-
-void ld_procmaps_dump(struct ld_procmaps *pm)
-{
-    if (!pm)
-        return;
-    LH_VERBOSE(4, "Pathname: %s",
-			pm->pathname ? pm->pathname : "Unknown");
-    LH_VERBOSE(4, "Address Start: "LX" End: "LX" Valid:"
-					" %d Offset: "LU, 
-			pm->addr_begin, pm->addr_end, pm->addr_valid,
-			(size_t)pm->offset);
-    LH_VERBOSE(4, "Device Major: %d Minor: %d",
-			pm->device_major, pm->device_minor);
-    LH_VERBOSE(4, "Inode: "LU, 
-			(size_t)pm->inode);
-    LH_VERBOSE(4, "Permissions: Read(%d) Write(%d) "
-					"Execute(%d) Private(%d) Shared(%d)",			
-            (pm->permissions & PROCMAPS_PERMS_READ) ? 1 : 0,
-            (pm->permissions & PROCMAPS_PERMS_WRITE) ? 1 : 0,
-            (pm->permissions & PROCMAPS_PERMS_EXEC) ? 1 : 0,
-            (pm->permissions & PROCMAPS_PERMS_PRIVATE) ? 1 : 0,
-			(pm->permissions & PROCMAPS_PERMS_SHARED) ? 1 : 0
-	);
-    LH_VERBOSE(4, "Pathname length: "LU, pm->pathname_sz);
-    LH_VERBOSE(4, "Filetype: %d", pm->filetype);
+void ld_procmaps_dump(struct ld_procmaps *pm) {
+	if (!pm)
+		return;
+	LH_VERBOSE(4, "Pathname: %s", pm->pathname ? pm->pathname : "Unknown");
+	LH_VERBOSE(4, "Address Start: " LX " End: " LX " Valid:" " %d Offset: " LU, pm->addr_begin, pm->addr_end, pm->addr_valid, (size_t) pm->offset);
+	LH_VERBOSE(4, "Device Major: %d Minor: %d", pm->device_major, pm->device_minor);
+	LH_VERBOSE(4, "Inode: " LU, (size_t) pm->inode);
+	LH_VERBOSE(4, "Permissions: Read(%d) Write(%d) " "Execute(%d) Private(%d) Shared(%d)", (pm->permissions & PROCMAPS_PERMS_READ) ? 1 : 0, (pm->permissions & PROCMAPS_PERMS_WRITE) ? 1 : 0, (pm->permissions & PROCMAPS_PERMS_EXEC) ? 1 : 0, (pm->permissions & PROCMAPS_PERMS_PRIVATE) ? 1 : 0, (pm->permissions & PROCMAPS_PERMS_SHARED) ? 1 : 0);
+	LH_VERBOSE(4, "Pathname length: " LU, pm->pathname_sz);
+	LH_VERBOSE(4, "Filetype: %d", pm->filetype);
 }
 
-int ld_procmaps_parse(char *buf, size_t bufsz, struct ld_procmaps *pm, const char *appname)
-{
-    if (!buf || !pm) {
+int ld_procmaps_parse(char *buf, size_t bufsz, struct ld_procmaps *pm, const char *appname) {
+	if (!buf || !pm) {
 		LH_ERROR("Invalid arguments.");
-        return -1;
+		return -1;
 	}
-    /* this is hardcoded parsing of the maps file */
-    do {
-        char *token = NULL;
-        char *save = NULL;
-        int idx, err;
-        memset(pm, 0, sizeof(*pm));
-        token = strtok_r(buf, "-", &save);
-        if (!token) break;
+	/* this is hardcoded parsing of the maps file */
+	do {
+		char *token = NULL;
+		char *save = NULL;
+		int idx, err;
+		memset(pm, 0, sizeof(*pm));
+		token = strtok_r(buf, "-", &save);
+		if (!token)
+			break;
 		errno = 0;
-        pm->addr_begin = (uintptr_t)strtoul(token, NULL, 16);
+		pm->addr_begin = (uintptr_t) strtoul(token, NULL, 16);
 		err = errno;
-        pm->addr_valid = (err == ERANGE || err == EINVAL) ? false : true;
-        if (!pm->addr_valid) {
-			LH_VERBOSE(2,"Strtoul error(%s) in parsing %s",strerror(err), token);
-        }
-        token = strtok_r(NULL, " ", &save);
-        if (!token) break;
+		pm->addr_valid = (err == ERANGE || err == EINVAL) ? false : true;
+		if (!pm->addr_valid) {
+			LH_VERBOSE(2, "Strtoul error(%s) in parsing %s", strerror(err), token);
+		}
+		token = strtok_r(NULL, " ", &save);
+		if (!token)
+			break;
 		errno = 0;
-        pm->addr_end = (intptr_t)strtoul(token, NULL, 16);
+		pm->addr_end = (intptr_t) strtoul(token, NULL, 16);
 		err = errno;
-        pm->addr_valid = (err == ERANGE || err == EINVAL) ? false : true;
-        if (!pm->addr_valid) {
-			LH_VERBOSE(2,"Strtoul error(%s) in parsing %s", strerror(err), token);
-        }
-        token = strtok_r(NULL, " ", &save);
-        if (!token) break;
-        pm->permissions = PROCMAPS_PERMS_NONE;
-        for (idx = strlen(token) - 1; idx >= 0; --idx) {
-            switch (token[idx]) {
-            case 'r':
-                pm->permissions |= PROCMAPS_PERMS_READ;
-                break;
-            case 'w':
-                pm->permissions |= PROCMAPS_PERMS_WRITE;
-                break;
-            case 'x':
-                pm->permissions |= PROCMAPS_PERMS_EXEC;
-                break;
-            case 'p':
-                pm->permissions |= PROCMAPS_PERMS_PRIVATE;
-                break;
+		pm->addr_valid = (err == ERANGE || err == EINVAL) ? false : true;
+		if (!pm->addr_valid) {
+			LH_VERBOSE(2, "Strtoul error(%s) in parsing %s", strerror(err), token);
+		}
+		token = strtok_r(NULL, " ", &save);
+		if (!token)
+			break;
+		pm->permissions = PROCMAPS_PERMS_NONE;
+		for (idx = strlen(token) - 1; idx >= 0; --idx) {
+			switch (token[idx]) {
+			case 'r':
+				pm->permissions |= PROCMAPS_PERMS_READ;
+				break;
+			case 'w':
+				pm->permissions |= PROCMAPS_PERMS_WRITE;
+				break;
+			case 'x':
+				pm->permissions |= PROCMAPS_PERMS_EXEC;
+				break;
+			case 'p':
+				pm->permissions |= PROCMAPS_PERMS_PRIVATE;
+				break;
 			case 's':
 				pm->permissions |= PROCMAPS_PERMS_SHARED;
 				break;
-            case '-':
-                break;
-            default:
-			LH_VERBOSE(2,"Unknown flag: %c", token[idx]);
-                break;
-            }
-        }
-        token = strtok_r(NULL, " ", &save);
-        if (!token) break;
+			case '-':
+				break;
+			default:
+				LH_VERBOSE(2, "Unknown flag: %c", token[idx]);
+				break;
+			}
+		}
+		token = strtok_r(NULL, " ", &save);
+		if (!token)
+			break;
 		errno = 0;
-        pm->offset = (off_t)strtoul(token, NULL, 16);
+		pm->offset = (off_t) strtoul(token, NULL, 16);
 		err = errno;
-        if (err == ERANGE || err == EINVAL) {
+		if (err == ERANGE || err == EINVAL) {
 			LH_VERBOSE(2, "Strtoul error(%s) in parsing %s", strerror(err), token);
-        }
-        token = strtok_r(NULL, ":", &save);
-        if (!token) break;
-        pm->device_major = (int)strtol(token, NULL, 10);
-        token = strtok_r(NULL, " ", &save);
-        if (!token) break;
-        pm->device_minor = (int)strtol(token, NULL, 10);
-        token = strtok_r(NULL, " ", &save);
-        if (!token) break;
-        pm->inode = (ino_t)strtoul(token, NULL, 10);
-        token = strtok_r(NULL, "\n", &save);
-        if (!token) break;
-        pm->pathname_sz = strlen(token);
-        pm->pathname = calloc(sizeof(char), pm->pathname_sz + 1);
-        if (!pm->pathname) {
+		}
+		token = strtok_r(NULL, ":", &save);
+		if (!token)
+			break;
+		pm->device_major = (int)strtol(token, NULL, 10);
+		token = strtok_r(NULL, " ", &save);
+		if (!token)
+			break;
+		pm->device_minor = (int)strtol(token, NULL, 10);
+		token = strtok_r(NULL, " ", &save);
+		if (!token)
+			break;
+		pm->inode = (ino_t) strtoul(token, NULL, 10);
+		token = strtok_r(NULL, "\n", &save);
+		if (!token)
+			break;
+		pm->pathname_sz = strlen(token);
+		pm->pathname = calloc(sizeof(char), pm->pathname_sz + 1);
+		if (!pm->pathname) {
 			LH_ERROR("malloc");
-            pm->pathname = NULL;
-            pm->pathname_sz = 0;
-            break;
-        }
-        /* trim the extra spaces out */
-        save = token;
-        /* find the real path names */
-        if ((token = strchr(save, '/'))) {
-            memcpy(pm->pathname, token, strlen(token));
-            if (strstr(pm->pathname, ".so") || strstr(pm->pathname, ".so.")) {
-                pm->filetype = PROCMAPS_FILETYPE_LIB;
-            } else {
-                struct stat statbuf;
-                pm->filetype = PROCMAPS_FILETYPE_DATA;
-                memset(&statbuf, 0, sizeof(statbuf));
-                if (stat(pm->pathname, &statbuf) >= 0) {
-                    ino_t inode1 = statbuf.st_ino;
-                    memset(&statbuf, 0, sizeof(statbuf));
-                    if (stat(appname, &statbuf) >= 0) {
-                        if (statbuf.st_ino == inode1)
-                            pm->filetype = PROCMAPS_FILETYPE_EXE;
-                    }
+			pm->pathname = NULL;
+			pm->pathname_sz = 0;
+			break;
+		}
+		/* trim the extra spaces out */
+		save = token;
+		/* find the real path names */
+		if ((token = strchr(save, '/'))) {
+			memcpy(pm->pathname, token, strlen(token));
+			if (strstr(pm->pathname, ".so") || strstr(pm->pathname, ".so.")) {
+				pm->filetype = PROCMAPS_FILETYPE_LIB;
+			} else {
+				struct stat statbuf;
+				pm->filetype = PROCMAPS_FILETYPE_DATA;
+				memset(&statbuf, 0, sizeof(statbuf));
+				if (stat(pm->pathname, &statbuf) >= 0) {
+					ino_t inode1 = statbuf.st_ino;
+					memset(&statbuf, 0, sizeof(statbuf));
+					if (stat(appname, &statbuf) >= 0) {
+						if (statbuf.st_ino == inode1)
+							pm->filetype = PROCMAPS_FILETYPE_EXE;
+					}
 				} else {
 					int err = errno;
-					LH_VERBOSE(2, "Unable to stat file %s. Error:"
-								" %s", pm->pathname,
-								strerror(err));
-                }
-            }
-        } else if ((token = strchr(save, '['))) {
-            memcpy(pm->pathname, token, strlen(token));
-            if (strstr(pm->pathname, "[heap]")) {
-                pm->filetype = PROCMAPS_FILETYPE_HEAP;
-            } else if (strstr(pm->pathname, "[stack]")) {
-                pm->filetype = PROCMAPS_FILETYPE_STACK;
-            } else if (strstr(pm->pathname, "[vdso]")) {
-                pm->filetype = PROCMAPS_FILETYPE_VDSO;
-            } else if (strstr(pm->pathname, "[vsyscall")) {
-                pm->filetype = PROCMAPS_FILETYPE_SYSCALL;
-            } else {
-	                LH_VERBOSE(2, "Unknown memory map: %s", pm->pathname);
-                pm->filetype = PROCMAPS_FILETYPE_UNKNOWN;
-            }
-        } else {
-            memcpy(pm->pathname, token, strlen(token));
-            pm->filetype = PROCMAPS_FILETYPE_UNKNOWN;
-        }
-    } while (0);
-    return 0;
+					LH_VERBOSE(2, "Unable to stat file %s. Error:" " %s", pm->pathname, strerror(err));
+				}
+			}
+		} else if ((token = strchr(save, '['))) {
+			memcpy(pm->pathname, token, strlen(token));
+			if (strstr(pm->pathname, "[heap]")) {
+				pm->filetype = PROCMAPS_FILETYPE_HEAP;
+			} else if (strstr(pm->pathname, "[stack]")) {
+				pm->filetype = PROCMAPS_FILETYPE_STACK;
+			} else if (strstr(pm->pathname, "[vdso]")) {
+				pm->filetype = PROCMAPS_FILETYPE_VDSO;
+			} else if (strstr(pm->pathname, "[vsyscall")) {
+				pm->filetype = PROCMAPS_FILETYPE_SYSCALL;
+			} else {
+				LH_VERBOSE(2, "Unknown memory map: %s", pm->pathname);
+				pm->filetype = PROCMAPS_FILETYPE_UNKNOWN;
+			}
+		} else {
+			memcpy(pm->pathname, token, strlen(token));
+			pm->filetype = PROCMAPS_FILETYPE_UNKNOWN;
+		}
+	} while (0);
+	return 0;
 }
 
-struct ld_procmaps *ld_load_maps(pid_t pid,  size_t *num)
-{
+struct ld_procmaps *ld_load_maps(pid_t pid, size_t * num) {
 	char filename[PATH_MAX];
 	char appname[PATH_MAX];
 	FILE *ff = NULL;
-    const size_t bufsz = 4096;
-    char *buf = NULL;
+	const size_t bufsz = 4096;
+	char *buf = NULL;
 	size_t mapmax = 0;
 	size_t mapnum = 0;
 	struct ld_procmaps *maps = NULL;
@@ -228,9 +217,9 @@ struct ld_procmaps *ld_load_maps(pid_t pid,  size_t *num)
 	}
 	snprintf(filename, PATH_MAX, "/proc/%d/maps", pid);
 	snprintf(appname, PATH_MAX, "/proc/%d/exe", pid);
-		LH_VERBOSE(2,"Using Proc Maps from %s", filename);
-		LH_VERBOSE(2,"Using Proc Exe from %s",appname);
-	
+	LH_VERBOSE(2, "Using Proc Maps from %s", filename);
+	LH_VERBOSE(2, "Using Proc Exe from %s", appname);
+
 	do {
 		buf = calloc(sizeof(char), bufsz);
 		if (!buf) {
@@ -244,21 +233,21 @@ struct ld_procmaps *ld_load_maps(pid_t pid,  size_t *num)
 		}
 		while (fgets(buf, bufsz, ff))
 			mapmax++;
-		LH_VERBOSE(1,"Max number of mappings present: "LU, mapmax);
+		LH_VERBOSE(1, "Max number of mappings present: " LU, mapmax);
 		fseek(ff, 0L, SEEK_SET);
 		maps = calloc(mapmax, sizeof(*maps));
 		if (!maps) {
 			LH_ERROR("malloc");
 			break;
 		}
-		LH_VERBOSE(1,"Allocated memory to load proc maps");
+		LH_VERBOSE(1, "Allocated memory to load proc maps");
 		memset(buf, 0, bufsz);
 		mapnum = 0;
 		while (fgets(buf, bufsz, ff)) {
 			struct ld_procmaps *pm = &maps[mapnum];
-			LH_VERBOSE(3,"Parsing %s", buf);
+			LH_VERBOSE(3, "Parsing %s", buf);
 			if (ld_procmaps_parse(buf, bufsz, pm, appname) < 0) {
-				LH_VERBOSE(1,"Parsing failure. Ignoring.");
+				LH_VERBOSE(1, "Parsing failure. Ignoring.");
 				continue;
 			}
 			ld_procmaps_dump(pm);
@@ -267,17 +256,16 @@ struct ld_procmaps *ld_load_maps(pid_t pid,  size_t *num)
 		if (num)
 			*num = mapnum;
 		else
-			LH_VERBOSE(3,"Cannot return size of maps object.");
+			LH_VERBOSE(3, "Cannot return size of maps object.");
 	} while (0);
 	if (buf)
-	    free(buf);
+		free(buf);
 	if (ff)
-	    fclose(ff);
+		fclose(ff);
 	return maps;
 }
 
-void ld_free_maps(struct ld_procmaps *maps, size_t num)
-{
+void ld_free_maps(struct ld_procmaps *maps, size_t num) {
 	if (maps && num > 0) {
 		size_t idx;
 		for (idx = 0; idx < num; ++idx) {
@@ -290,12 +278,9 @@ void ld_free_maps(struct ld_procmaps *maps, size_t num)
 	}
 }
 
-int ld_find_library(struct ld_procmaps *maps, const size_t mapnum,
-					const char *libpath, bool inode_match,
-					struct ld_procmaps **lib)
-{
+int ld_find_library(struct ld_procmaps *maps, const size_t mapnum, const char *libpath, bool inode_match, struct ld_procmaps **lib) {
 	if (!maps && !libpath) {
-		LH_VERBOSE(3,"Invalid arguments.");
+		LH_VERBOSE(3, "Invalid arguments.");
 		return -1;
 	} else {
 		size_t idx;
@@ -307,21 +292,20 @@ int ld_find_library(struct ld_procmaps *maps, const size_t mapnum,
 			struct stat statbuf = { 0 };
 			if (stat(libpath, &statbuf) < 0) {
 				int err = errno;
-				LH_VERBOSE(1,"Unable to get inode for %s. Error: %s", libpath, strerror(err));
+				LH_VERBOSE(1, "Unable to get inode for %s. Error: %s", libpath, strerror(err));
 				return -1;
 			}
 			inode = statbuf.st_ino;
 		} else {
-			LH_VERBOSE(2,"Not doing an inode match.");
-			nonlib_match = (strchr(libpath, '[') || strchr(libpath, ']')) ?
-							true : false;
+			LH_VERBOSE(2, "Not doing an inode match.");
+			nonlib_match = (strchr(libpath, '[') || strchr(libpath, ']')) ? true : false;
 			if (nonlib_match)
-				LH_VERBOSE(2,"Found '[' or ']' in %s", libpath);
+				LH_VERBOSE(2, "Found '[' or ']' in %s", libpath);
 			exact_match = (strchr(libpath, '/')) ? true : false;
 			if (exact_match)
-				LH_VERBOSE(2,"Found '/' in %s. Doing an exact match search", libpath);
+				LH_VERBOSE(2, "Found '/' in %s. Doing an exact match search", libpath);
 			if (!nonlib_match && !exact_match)
-				LH_VERBOSE(2,"Doing best substring search for %s.",libpath);
+				LH_VERBOSE(2, "Doing best substring search for %s.", libpath);
 		}
 
 		for (idx = 0; idx < mapnum; ++idx) {
@@ -348,23 +332,18 @@ int ld_find_library(struct ld_procmaps *maps, const size_t mapnum,
 					/* we're looking for a non-library or a non-exe file or a
 					 * non-data file
 					 */
-					if (pm->filetype == PROCMAPS_FILETYPE_VDSO ||
-						pm->filetype == PROCMAPS_FILETYPE_HEAP ||
-						pm->filetype == PROCMAPS_FILETYPE_STACK ||
-						pm->filetype == PROCMAPS_FILETYPE_SYSCALL) {
+					if (pm->filetype == PROCMAPS_FILETYPE_VDSO || pm->filetype == PROCMAPS_FILETYPE_HEAP || pm->filetype == PROCMAPS_FILETYPE_STACK || pm->filetype == PROCMAPS_FILETYPE_SYSCALL) {
 						/* doing a substring match to be safe */
-						found = strstr(pm->pathname, libpath) != NULL ?
-								true :false;
+						found = strstr(pm->pathname, libpath) != NULL ? true : false;
 					}
 				} else {
 					if (pm->inode == 0)
 						continue;
-					if ((pm->filetype != PROCMAPS_FILETYPE_LIB)&&(pm->filetype != PROCMAPS_FILETYPE_EXE))
+					if ((pm->filetype != PROCMAPS_FILETYPE_LIB) && (pm->filetype != PROCMAPS_FILETYPE_EXE))
 						continue;
 					/* we're doing an exact match */
 					if (exact_match) {
-						found = strcmp(libpath, pm->pathname) == 0 ?
-								true : false;
+						found = strcmp(libpath, pm->pathname) == 0 ? true : false;
 					} else {
 						/* do a substring match for best fit. If the string
 						 * matches then check if the next character is not an
@@ -376,46 +355,43 @@ int ld_find_library(struct ld_procmaps *maps, const size_t mapnum,
 							size_t alen = strlen(libpath);
 							if (sub[alen] == '.' || sub[alen] == '-' || sub[alen] == '\0')
 								found = true;
-                                                        else
-                                                        if((libpath[0] == '\0') && (pm->filetype == PROCMAPS_FILETYPE_EXE))
+							else if ((libpath[0] == '\0') && (pm->filetype == PROCMAPS_FILETYPE_EXE))
 								found = true;
 						}
 					}
 				}
 			}
 			if (found) {
-				LH_VERBOSE(2,"Found index ("LU") matching.", idx);
-				LH_VERBOSE(1,"Found entry %s matching %s", pm->pathname, libpath);
+				LH_VERBOSE(2, "Found index (" LU ") matching.", idx);
+				LH_VERBOSE(1, "Found entry %s matching %s", pm->pathname, libpath);
 				break;
 			}
 		}
 		if (!found) {
-			LH_VERBOSE(1,"Library %s not found in procmaps",libpath);
+			LH_VERBOSE(1, "Library %s not found in procmaps", libpath);
 			return -1;
 		}
 		if (found && lib) {
-                    *lib = &maps[idx];
+			*lib = &maps[idx];
 		}
 	}
 	return 0;
 }
 
-uintptr_t ld_find_address(const struct ld_procmaps *lib, const char *symbol, size_t* size)
-{
+uintptr_t ld_find_address(const struct ld_procmaps * lib, const char *symbol, size_t * size) {
 	uintptr_t ptr = 0;
 	if (lib && symbol && lib->pathname) {
 		size_t syms_num = 0;
-		struct elf_symbol *syms = exe_load_symbols(lib->pathname,&syms_num, NULL, NULL, NULL);
+		struct elf_symbol *syms = exe_load_symbols(lib->pathname, &syms_num, NULL, NULL, NULL);
 		if (syms && syms_num > 0) {
 			size_t idx = 0;
-			LH_VERBOSE(1, LU" symbols found in %s", syms_num, lib->pathname);
+			LH_VERBOSE(1, LU " symbols found in %s", syms_num, lib->pathname);
 			qsort(syms, syms_num, sizeof(*syms), elf_symbol_cmpqsort);
 			for (idx = 0; idx < syms_num; ++idx) {
 				if (strcmp(symbol, syms[idx].name) == 0) {
-					LH_VERBOSE(2,"Found %s in symbol list at "
-								""LU" with address offset "LX, symbol, idx, syms[idx].address);
-					if(size != NULL)
- 			   		   *size = syms[idx].size;
+					LH_VERBOSE(2, "Found %s in symbol list at " "" LU " with address offset " LX, symbol, idx, syms[idx].address);
+					if (size != NULL)
+						*size = syms[idx].size;
 					if (syms[idx].address > lib->addr_begin)
 						ptr = syms[idx].address;
 					else
@@ -432,7 +408,7 @@ uintptr_t ld_find_address(const struct ld_procmaps *lib, const char *symbol, siz
 			free(syms);
 			syms_num = 0;
 		} else {
-			LH_VERBOSE(1,"No symbols found in %s",lib->pathname);
+			LH_VERBOSE(1, "No symbols found in %s", lib->pathname);
 		}
 	} else {
 		LH_ERROR("Invalid arguments.");

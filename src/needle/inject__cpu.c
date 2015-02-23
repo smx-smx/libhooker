@@ -9,9 +9,9 @@
 #include "inject.h"
 
 #if __x86_64__
-    #include "inject_x64.cx"
+#    include "inject_x64.cx"
 #elif __i386__
-    #include "inject_i386.cx"
+#    include "inject_i386.cx"
 #elif __arm__
-    #include "inject_arm.cx"
+#    include "inject_arm.cx"
 #endif

@@ -32,15 +32,15 @@
 #include "inject.h"
 
 #if __WORDSIZE == 64
-	typedef Elf64_Ehdr Elf_Ehdr;
-	typedef Elf64_Phdr Elf_Phdr;
-	typedef Elf64_Shdr Elf_Shdr;
-	typedef Elf64_Sym Elf_Sym;
+typedef Elf64_Ehdr Elf_Ehdr;
+typedef Elf64_Phdr Elf_Phdr;
+typedef Elf64_Shdr Elf_Shdr;
+typedef Elf64_Sym Elf_Sym;
 #else
-	typedef Elf32_Ehdr Elf_Ehdr;
-	typedef Elf32_Phdr Elf_Phdr;
-	typedef Elf32_Shdr Elf_Shdr;
-	typedef Elf32_Sym Elf_Sym;
+typedef Elf32_Ehdr Elf_Ehdr;
+typedef Elf32_Phdr Elf_Phdr;
+typedef Elf32_Shdr Elf_Shdr;
+typedef Elf32_Sym Elf_Sym;
 #endif
 
 enum {
@@ -52,15 +52,15 @@ struct elf_internals {
 	int fd;
 	enum elf_bit is64;
 	off_t proghdr_offset;
-	void *proghdrs; /* program headers */
+	void *proghdrs;				/* program headers */
 	size_t proghdr_num;
-	size_t proghdr_size; /* total buffer size */
+	size_t proghdr_size;		/* total buffer size */
 	off_t sechdr_offset;
-	void *sechdrs; /* section headers */
+	void *sechdrs;				/* section headers */
 	size_t sechdr_num;
-	size_t sechdr_size; /* total buffer size */
+	size_t sechdr_size;			/* total buffer size */
 	size_t secnametbl_idx;
-	char *strsectbl; /* string table for section names */
+	char *strsectbl;			/* string table for section names */
 	size_t strsectbl_size;
 	/*
 	 * stored here temporarily, should not be freed unless on failure.
@@ -72,8 +72,7 @@ struct elf_internals {
 };
 
 /* each of the exe_* functions have to be reentrant and thread-safe */
-static int exe_get_hotpatch_type(int info, int group)
-{
+static int exe_get_hotpatch_type(int info, int group) {
 	if (group == HOTPATCH_SYMBOL_TYPE) {
 		int value = ELF64_ST_TYPE(info);
 		if (value == STT_FUNC)
@@ -90,11 +89,10 @@ static int exe_get_hotpatch_type(int info, int group)
 	return -1;
 }
 
-static int exe_open_filename(const char *filename)
-{
+static int exe_open_filename(const char *filename) {
 	int fd = -1;
 	fd = open(filename, O_RDONLY);
-	if (fd < 0) 
+	if (fd < 0)
 		LH_ERROR("open");
 
 	LH_VERBOSE(3, "Exe file descriptor: %d", fd);
@@ -102,23 +100,19 @@ static int exe_open_filename(const char *filename)
 	return fd;
 }
 
-static int exe_elf_identify(unsigned char *e_ident, size_t size)
-{
+static int exe_elf_identify(unsigned char *e_ident, size_t size) {
 	if (e_ident && size > 0) {
-		if ((e_ident[EI_MAG0] == ELFMAG0) &&
-			(e_ident[EI_MAG1] == ELFMAG1) &&
-			(e_ident[EI_MAG2] == ELFMAG2) &&
-			(e_ident[EI_MAG3] == ELFMAG3)) {
+		if ((e_ident[EI_MAG0] == ELFMAG0) && (e_ident[EI_MAG1] == ELFMAG1) && (e_ident[EI_MAG2] == ELFMAG2) && (e_ident[EI_MAG3] == ELFMAG3)) {
 			int is64 = HOTPATCH_EXE_IS_NEITHER;
 			/* magic number says this is an ELF file */
 			switch (e_ident[EI_CLASS]) {
 			case ELFCLASS32:
 				is64 = HOTPATCH_EXE_IS_32BIT;
-				LH_VERBOSE(3,"File is 32-bit ELF");
+				LH_VERBOSE(3, "File is 32-bit ELF");
 				break;
 			case ELFCLASS64:
 				is64 = HOTPATCH_EXE_IS_64BIT;
-				LH_VERBOSE(3,"File is 64-bit ELF");
+				LH_VERBOSE(3, "File is 64-bit ELF");
 				break;
 			case ELFCLASSNONE:
 			default:
@@ -133,11 +127,11 @@ static int exe_elf_identify(unsigned char *e_ident, size_t size)
 				switch (e_ident[EI_DATA]) {
 				case ELFDATA2LSB:
 					isbigendian = 0;
-					LH_VERBOSE(3,"Little endian format.");
+					LH_VERBOSE(3, "Little endian format.");
 					break;
 				case ELFDATA2MSB:
 					isbigendian = 1;
-					LH_VERBOSE(3,"Big endian format.");
+					LH_VERBOSE(3, "Big endian format.");
 					break;
 				case ELFDATANONE:
 				default:
@@ -147,11 +141,10 @@ static int exe_elf_identify(unsigned char *e_ident, size_t size)
 				}
 				if (e_ident[EI_VERSION] == EV_CURRENT) {
 					iscurrent = 1;
-					LH_VERBOSE(3,"Current ELF format.");
+					LH_VERBOSE(3, "Current ELF format.");
 				}
-				LH_VERBOSE(3,"ELFOSABI: %d", e_ident[EI_OSABI]);
-				if (e_ident[EI_OSABI] == ELFOSABI_LINUX ||
-					e_ident[EI_OSABI] == ELFOSABI_SYSV) {
+				LH_VERBOSE(3, "ELFOSABI: %d", e_ident[EI_OSABI]);
+				if (e_ident[EI_OSABI] == ELFOSABI_LINUX || e_ident[EI_OSABI] == ELFOSABI_SYSV) {
 					islinux = 1;
 					LH_VERBOSE(3, "OS ABI is Linux.");
 				}
@@ -167,21 +160,20 @@ static int exe_elf_identify(unsigned char *e_ident, size_t size)
 	return HOTPATCH_EXE_IS_NEITHER;
 }
 
-static int exe_load_symbol_table(struct elf_internals *ei, Elf_Shdr *symh, Elf_Shdr *strh)
-{
+static int exe_load_symbol_table(struct elf_internals *ei, Elf_Shdr * symh, Elf_Shdr * strh) {
 	char *strsymtbl = NULL;
 	size_t strsymtbl_size = 0;
 	while (ei && symh && strh) {
-		LH_VERBOSE(3,"Retrieving symbol table.");
+		LH_VERBOSE(3, "Retrieving symbol table.");
 		if (lseek(ei->fd, strh->sh_offset, SEEK_SET) < 0) {
 			LH_ERROR_SE("lseek");
 			break;
 		}
 		strsymtbl_size = strh->sh_size + 0;
-                if(strsymtbl_size == 0) {
+		if (strsymtbl_size == 0) {
 			LH_ERROR("strsymtbl_size == 0");
 			break;
-                }
+		}
 		strsymtbl = malloc(strh->sh_size);
 		if (!strsymtbl) {
 			LH_ERROR_SE("malloc");
@@ -212,9 +204,7 @@ static int exe_load_symbol_table(struct elf_internals *ei, Elf_Shdr *symh, Elf_S
 			/* there might already exist symbols from another section.
 			 * hence using realloc() takes care of that.
 			 * */
-			ei->symbols = realloc(ei->symbols,
-								  (sym_num + ei->symbols_num) *
-								  sizeof(*ei->symbols));
+			ei->symbols = realloc(ei->symbols, (sym_num + ei->symbols_num) * sizeof(*ei->symbols));
 			if (!ei->symbols) {
 				LH_ERROR_SE("malloc");
 				break;
@@ -222,25 +212,20 @@ static int exe_load_symbol_table(struct elf_internals *ei, Elf_Shdr *symh, Elf_S
 			memset(&ei->symbols[ei->symbols_num], 0, sizeof(*ei->symbols) * sym_num);
 			/* index 0 is always NULL */
 			for (idx = 1; idx < sym_num; ++idx) {
-				const char *name = syms[idx].st_name > 0 ?
-					&strsymtbl[syms[idx].st_name] : "";
+				const char *name = syms[idx].st_name > 0 ? &strsymtbl[syms[idx].st_name] : "";
 				if (name) {
 					char *name2;
 					int symtype = exe_get_hotpatch_type(syms[idx].st_info,
-									HOTPATCH_SYMBOL_TYPE);
-					LH_VERBOSE(3,
-							"Symbol "LU" is %s at %p type %d size "LU,
-							idx, name,
-							(void *)syms[idx].st_value, symtype,
-							syms[idx].st_size);
+														HOTPATCH_SYMBOL_TYPE);
+					LH_VERBOSE(3, "Symbol " LU " is %s at %p type %d size " LU, idx, name, (void *)syms[idx].st_value, symtype, syms[idx].st_size);
 					name2 = strdup(name);
 					if (!name2) {
 						LH_ERROR_SE("malloc");
 						continue;
 					}
 					ei->symbols[ei->symbols_num].name = name2;
-					ei->symbols[ei->symbols_num].address = (uintptr_t)syms[idx].st_value;
-					ei->symbols[ei->symbols_num].size = (size_t)syms[idx].st_size;
+					ei->symbols[ei->symbols_num].address = (uintptr_t) syms[idx].st_value;
+					ei->symbols[ei->symbols_num].size = (size_t) syms[idx].st_size;
 					ei->symbols[ei->symbols_num].type = symtype;
 					ei->symbols_num++;
 				}
@@ -256,8 +241,7 @@ static int exe_load_symbol_table(struct elf_internals *ei, Elf_Shdr *symh, Elf_S
 	return -1;
 }
 
-static int exe_load_section_headers(struct elf_internals *ei)
-{
+static int exe_load_section_headers(struct elf_internals *ei) {
 	Elf_Shdr *strsectblhdr = NULL;
 	Elf_Shdr *sechdrs = NULL;
 	size_t idx = 0;
@@ -266,14 +250,14 @@ static int exe_load_section_headers(struct elf_internals *ei)
 
 	if (!ei || ei->sechdr_offset == 0 || ei->sechdr_size == 0)
 		return -1;
-	LH_VERBOSE(2,"Retrieving section headers.");
+	LH_VERBOSE(2, "Retrieving section headers.");
 	ei->sechdrs = malloc(ei->sechdr_size);
 	if (!ei->sechdrs) {
 		LH_ERROR_SE("malloc");
 		return -1;
 	}
 	memset(ei->sechdrs, 0, ei->sechdr_size);
-	LH_VERBOSE(2,"Reading section header offset at "LU, (size_t)ei->sechdr_offset);
+	LH_VERBOSE(2, "Reading section header offset at " LU, (size_t) ei->sechdr_offset);
 	if (lseek(ei->fd, ei->sechdr_offset, SEEK_SET) < 0) {
 		LH_ERROR_SE("lseek");
 		return -1;
@@ -282,7 +266,7 @@ static int exe_load_section_headers(struct elf_internals *ei)
 		LH_ERROR_SE("read");
 		return -1;
 	}
-	sechdrs = (Elf_Shdr *)ei->sechdrs;
+	sechdrs = (Elf_Shdr *) ei->sechdrs;
 	strsectblhdr = &sechdrs[ei->secnametbl_idx];
 	if (lseek(ei->fd, strsectblhdr->sh_offset, SEEK_SET) < 0) {
 		LH_ERROR_SE("lseek");
@@ -298,34 +282,25 @@ static int exe_load_section_headers(struct elf_internals *ei)
 		LH_ERROR_SE("read");
 		return -1;
 	}
-	LH_VERBOSE(2,"Number of sections: "LU,ei->sechdr_num);
+	LH_VERBOSE(2, "Number of sections: " LU, ei->sechdr_num);
 	for (idx = 0; idx < ei->sechdr_num; ++idx) {
 		const char *name = &ei->strsectbl[sechdrs[idx].sh_name];
-			if (name)
-				LH_VERBOSE(2,"Section name: %s Addr: %p Len: "LU,
-						name, (void *)sechdrs[idx].sh_offset,
-						sechdrs[idx].sh_size);
-			else
-				LH_VERBOSE(2,"Section name: %s Addr: %p Len: "LU,
-						"N/A", (void *)sechdrs[idx].sh_offset,
-						sechdrs[idx].sh_size);
-		
+		if (name)
+			LH_VERBOSE(2, "Section name: %s Addr: %p Len: " LU, name, (void *)sechdrs[idx].sh_offset, sechdrs[idx].sh_size);
+		else
+			LH_VERBOSE(2, "Section name: %s Addr: %p Len: " LU, "N/A", (void *)sechdrs[idx].sh_offset, sechdrs[idx].sh_size);
+
 		switch (sechdrs[idx].sh_type) {
 		case SHT_SYMTAB:
 		case SHT_DYNSYM:
 			symtab = idx;
-			LH_VERBOSE(3, "Symbol table offset: "LU" size: "LU" "
-						"entsize: "LU" entries: "LU,
-				sechdrs[idx].sh_offset,
-				sechdrs[idx].sh_size, sechdrs[idx].sh_entsize,
-				(sechdrs[idx].sh_entsize > 0 ? sechdrs[idx].sh_size / sechdrs[idx].sh_entsize : 0));
+			LH_VERBOSE(3, "Symbol table offset: " LU " size: " LU " " "entsize: " LU " entries: " LU, sechdrs[idx].sh_offset, sechdrs[idx].sh_size, sechdrs[idx].sh_entsize, (sechdrs[idx].sh_entsize > 0 ? sechdrs[idx].sh_size / sechdrs[idx].sh_entsize : 0));
 			break;
 		case SHT_STRTAB:
 			if (idx != ei->secnametbl_idx) {
 				strtab = idx;
 				LH_VERBOSE(2, "Reading symbol table from %s", name);
-				if (symtab >= 0 && exe_load_symbol_table(ei, &sechdrs[symtab],
-							&sechdrs[strtab]) < 0) {
+				if (symtab >= 0 && exe_load_symbol_table(ei, &sechdrs[symtab], &sechdrs[strtab]) < 0) {
 					LH_ERROR("Failed to retrieve symbol table.");
 				}
 				symtab = -1;
@@ -338,8 +313,7 @@ static int exe_load_section_headers(struct elf_internals *ei)
 	return 0;
 }
 
-static int exe_load_program_headers(struct elf_internals *ei)
-{
+static int exe_load_program_headers(struct elf_internals *ei) {
 	Elf_Phdr *proghdrs = NULL;
 	size_t idx = 0;
 	int rc = 0;
@@ -359,20 +333,14 @@ static int exe_load_program_headers(struct elf_internals *ei)
 		LH_ERROR_SE("read");
 		return -1;
 	}
-	LH_VERBOSE(2,"Number of segments: "LU,	ei->proghdr_num);
-	proghdrs = (Elf_Phdr *)ei->proghdrs;
+	LH_VERBOSE(2, "Number of segments: " LU, ei->proghdr_num);
+	proghdrs = (Elf_Phdr *) ei->proghdrs;
 	for (idx = 0; idx < ei->proghdr_num; ++idx) {
 		rc = 0;
-		LH_VERBOSE(2,
-					"Prog-header "LU": Type: %d "
-					"VAddr: %p PAddr: %p FileSz: "LU" MemSz: "LU,
-					 idx, proghdrs[idx].p_type,
-					(void *)proghdrs[idx].p_vaddr,
-					(void *)proghdrs[idx].p_paddr,
-					proghdrs[idx].p_filesz, proghdrs[idx].p_memsz);
-		
+		LH_VERBOSE(2, "Prog-header " LU ": Type: %d " "VAddr: %p PAddr: %p FileSz: " LU " MemSz: " LU, idx, proghdrs[idx].p_type, (void *)proghdrs[idx].p_vaddr, (void *)proghdrs[idx].p_paddr, proghdrs[idx].p_filesz, proghdrs[idx].p_memsz);
+
 		if (proghdrs[idx].p_type == PT_INTERP) {
-			LH_VERBOSE(1,"PT_INTERP section found");
+			LH_VERBOSE(1, "PT_INTERP section found");
 			if (proghdrs[idx].p_filesz == 0)
 				continue;
 			if (lseek(ei->fd, proghdrs[idx].p_offset, SEEK_SET) < 0) {
@@ -397,20 +365,17 @@ static int exe_load_program_headers(struct elf_internals *ei)
 			}
 			ei->interp.length = proghdrs[idx].p_filesz;
 			ei->interp.ph_addr = proghdrs[idx].p_vaddr;
-			LH_VERBOSE(1, "Found %s at V-Addr 0x"LX,
-						ei->interp.name,
-						ei->interp.ph_addr);
+			LH_VERBOSE(1, "Found %s at V-Addr 0x" LX, ei->interp.name, ei->interp.ph_addr);
 		} else if (proghdrs[idx].p_type == PT_DYNAMIC) {
-			LH_VERBOSE(2,"PT_DYNAMIC section found");
+			LH_VERBOSE(2, "PT_DYNAMIC section found");
 		} else if (proghdrs[idx].p_type == PT_LOAD) {
-			LH_VERBOSE(2,"PT_LOAD section found");
+			LH_VERBOSE(2, "PT_LOAD section found");
 		}
 	}
 	return rc;
 }
 
-static int exe_load_headers(struct elf_internals *ei)
-{
+static int exe_load_headers(struct elf_internals *ei) {
 	Elf_Ehdr hdr;
 	int fd = -1;
 	if (!ei) {
@@ -426,21 +391,21 @@ static int exe_load_headers(struct elf_internals *ei)
 		LH_ERROR_SE("read");
 		return -1;
 	}
-	LH_VERBOSE(2,"Reading Elf header.");
+	LH_VERBOSE(2, "Reading Elf header.");
 	ei->is64 = exe_elf_identify(hdr.e_ident, EI_NIDENT);
 	switch (ei->is64) {
 	case HOTPATCH_EXE_IS_64BIT:
-		LH_VERBOSE(2,"64-bit valid exe");
+		LH_VERBOSE(2, "64-bit valid exe");
 		break;
 	case HOTPATCH_EXE_IS_32BIT:
-		LH_VERBOSE(2,"32-bit valid exe");
+		LH_VERBOSE(2, "32-bit valid exe");
 		break;
 	case HOTPATCH_EXE_IS_NEITHER:
 	default:
 		return -1;
 	}
 	LH_VERBOSE(1, "Entry point %p", (void *)hdr.e_entry);
-	ei->entry_point = (uintptr_t)hdr.e_entry;
+	ei->entry_point = (uintptr_t) hdr.e_entry;
 /*
 // we do not filter on the architecture anymore
 	if (hdr.e_machine != EM_X86_64 && hdr.e_machine != EM_386) {
@@ -460,7 +425,7 @@ static int exe_load_headers(struct elf_internals *ei)
 		ei->proghdr_size = 0 + hdr.e_phnum * hdr.e_phentsize;
 	}
 	if (exe_load_section_headers(ei) < 0) {
-		LH_ERROR( "Error in loading section headers" );
+		LH_ERROR("Error in loading section headers");
 		return -1;
 	}
 	if (exe_load_program_headers(ei) < 0) {
@@ -470,12 +435,7 @@ static int exe_load_headers(struct elf_internals *ei)
 	return 0;
 }
 
-struct elf_symbol *exe_load_symbols(const char *filename,
-									 size_t *symbols_num,
-									 uintptr_t *entry_point,
-									 struct elf_interp *interp,
-									 enum elf_bit *is64)
-{
+struct elf_symbol *exe_load_symbols(const char *filename, size_t * symbols_num, uintptr_t * entry_point, struct elf_interp *interp, enum elf_bit *is64) {
 	int rc = 0;
 	struct elf_symbol *symbols = NULL;
 	struct elf_internals ei;
@@ -487,7 +447,7 @@ struct elf_symbol *exe_load_symbols(const char *filename,
 		return NULL;
 	}
 	if ((rc = exe_load_headers(&ei)) < 0) {
-		LH_PRINT("Unable to load Elf details for %s",filename);
+		LH_PRINT("Unable to load Elf details for %s", filename);
 	}
 	LH_VERBOSE(3, "Freeing internal structure.");
 	if (ei.fd >= 0)
@@ -521,7 +481,7 @@ struct elf_symbol *exe_load_symbols(const char *filename,
 		ei.symbols = NULL;
 		ei.symbols_num = 0;
 	} else {
-		LH_VERBOSE(2,"Readying return values.");
+		LH_VERBOSE(2, "Readying return values.");
 		symbols = ei.symbols;
 		if (symbols_num)
 			*symbols_num = ei.symbols_num;
@@ -542,8 +502,6 @@ struct elf_symbol *exe_load_symbols(const char *filename,
 	return symbols;
 }
 
-int elf_symbol_cmpqsort(const void *p1, const void *p2)
-{
-	return strcmp(((const struct elf_symbol *)p1)->name,
-				  ((const struct elf_symbol *)p2)->name);
+int elf_symbol_cmpqsort(const void *p1, const void *p2) {
+	return strcmp(((const struct elf_symbol *)p1)->name, ((const struct elf_symbol *)p2)->name);
 }

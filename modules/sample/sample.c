@@ -2,75 +2,67 @@
 #include "lh_mod_common.h"
 #include <sys/mman.h>
 
-
-void (*original_test_function)(int a, char*b);
+void (*original_test_function) (int a, char *b);
 
 void hooked_autoinit_post(lh_main_process_t * proc) {
-  LH_PRINT("This function is called after the wanted functions are hooked.");
+	LH_PRINT("This function is called after the wanted functions are hooked.");
 }
 
 int hooked_autoinit(lh_main_process_t * proc) {
 
-  original_test_function = NULL;
+	original_test_function = NULL;
 
-  LH_PRINT("This function is intended to autorun at each time being injected to an executable.");
-  LH_PRINT("At this time, we were injected into: %d (%s)", proc->pid, proc->exename);
+	LH_PRINT("This function is intended to autorun at each time being injected to an executable.");
+	LH_PRINT("At this time, we were injected into: %d (%s)", proc->pid, proc->exename);
 
-  return LH_SUCCESS;
+	return LH_SUCCESS;
 }
 
-int hooked_otherfunction(int a, char* s){
-  LH_PRINT("Okay, other function is hooked too. %d, %s", a, s);
-  // we dont call the original here.
+int hooked_otherfunction(int a, char *s) {
+	LH_PRINT("Okay, other function is hooked too. %d, %s", a, s);
+	// we dont call the original here.
 
-  return 1;
+	return 1;
 }
 
-int hooked_testfunction(int a, char* s){
-  LH_PRINT("We are in the hooked test function! %d %s", a, s);
+int hooked_testfunction(int a, char *s) {
+	LH_PRINT("We are in the hooked test function! %d %s", a, s);
 
-  LH_PRINT("Lets call the original one with new parameters:");
+	LH_PRINT("Lets call the original one with new parameters:");
 
-  original_test_function(12345, "_____________________ IS THERE ANYBODY IN THERE?");
+	original_test_function(12345, "_____________________ IS THERE ANYBODY IN THERE?");
 
-  LH_PRINT("Good, hah?\n\n");
+	LH_PRINT("Good, hah?\n\n");
 
-  return 0;
+	return 0;
 }
-
 
 lh_hook_t hook_settings = {
-  .version = 1,
-  .autoinit_pre = hooked_autoinit,
-  .autoinit_post = hooked_autoinit_post,
-  .fn_hooks = {
+	.version = 1,
+	.autoinit_pre = hooked_autoinit,
+	.autoinit_post = hooked_autoinit_post,
+	.fn_hooks = {
 
-    {
-          .hook_kind = LHM_FN_HOOK_BY_NAME,
-          .libname = "", // means the fn symbol should be defined in the main executable
-          .symname = "otherfunction",
-          .hook_fn = (uintptr_t) hooked_otherfunction,
-          .orig_function_ptr = 0,
-          .opcode_bytes_to_restore = 8
-      
-    }, 
-    {
-          .hook_kind = LHM_FN_HOOK_BY_NAME,
-          .libname = "",
-          .symname = "testfunction",
-          .hook_fn = (uintptr_t) hooked_testfunction,
-          .orig_function_ptr = (uintptr_t) &original_test_function,
-          .opcode_bytes_to_restore = 8
-      
-    },
-    {
-          .hook_kind = LHM_FN_HOOK_TRAILING
-    }
-  }
+				 {
+				  .hook_kind = LHM_FN_HOOK_BY_NAME,
+				  .libname = "",	// means the fn symbol should be defined in the main executable
+				  .symname = "otherfunction",
+				  .hook_fn = (uintptr_t) hooked_otherfunction,
+				  .orig_function_ptr = 0,
+				  .opcode_bytes_to_restore = 8}
+				 ,
+				 {
+				  .hook_kind = LHM_FN_HOOK_BY_NAME,
+				  .libname = "",
+				  .symname = "testfunction",
+				  .hook_fn = (uintptr_t) hooked_testfunction,
+				  .orig_function_ptr = (uintptr_t) & original_test_function,
+				  .opcode_bytes_to_restore = 8}
+				 ,
+				 {
+				  .hook_kind = LHM_FN_HOOK_TRAILING}
+				 }
 };
-
-
-
 
 /*
 //--------------------------------------------------------------- dont care about these ones, was just testing

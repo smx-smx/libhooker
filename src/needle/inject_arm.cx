@@ -1,27 +1,26 @@
 
 inline int inj_absjmp_opcode_bytes() {
-  return 4+4;
+	return 4 + 4;
 }
 
 inline int inj_reljmp_opcode_bytes() {
-  return 4;
+	return 4;
 }
 
-int inj_build_rel_jump(unsigned char* buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address)
-{
-  if(jump_destination % 4 != 0) {
-     LH_ERROR("Destination address is not multiple of 4");
-     return -1;
-  }
-  if(jump_opcode_address % 4 != 0) {
-     LH_ERROR("Opcode address is not multiple of 4");
-     return -1;
-  }
+int inj_build_rel_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address) {
+	if (jump_destination % 4 != 0) {
+		LH_ERROR("Destination address is not multiple of 4");
+		return -1;
+	}
+	if (jump_opcode_address % 4 != 0) {
+		LH_ERROR("Opcode address is not multiple of 4");
+		return -1;
+	}
 
-  uint32_t offset = (uint32_t)  jump_destination - jump_opcode_address - 4;
-  LH_VERBOSE(4, "Offset is: "LX, offset);
-  uint32_t operand = (offset / 4) - 1;
-  LH_VERBOSE(4, "Operand is: "LX, operand);
+	uint32_t offset = (uint32_t) jump_destination - jump_opcode_address - 4;
+	LH_VERBOSE(4, "Offset is: " LX, offset);
+	uint32_t operand = (offset / 4) - 1;
+	LH_VERBOSE(4, "Operand is: " LX, operand);
 
 /*
 // todo: validate this somehow
@@ -30,27 +29,26 @@ int inj_build_rel_jump(unsigned char* buffer, uintptr_t jump_destination, uintpt
      return -1;
   }
 */
-  uint32_t* x = (uint32_t*) buffer;
-  *x = operand;
-  buffer[3] = 0xEA;
+	uint32_t *x = (uint32_t *) buffer;
+	*x = operand;
+	buffer[3] = 0xEA;
 
-  return LH_SUCCESS;
+	return LH_SUCCESS;
 }
 
 //ldr pc, [pc, #-4] => 04 f0 1f e5
-int inj_build_abs_jump(unsigned char* buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address)
-{
-  int i = 0;
-  buffer[i++] = 0x04;
-  buffer[i++] = 0xf0;
-  buffer[i++] = 0x1f;
-  buffer[i++] = 0xe5;
+int inj_build_abs_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address) {
+	int i = 0;
+	buffer[i++] = 0x04;
+	buffer[i++] = 0xf0;
+	buffer[i++] = 0x1f;
+	buffer[i++] = 0xe5;
 
-  uint32_t dest = (uint32_t) jump_destination;
-  uint32_t* x = (uint32_t*)&(buffer[i]);
-  *x = dest;
+	uint32_t dest = (uint32_t) jump_destination;
+	uint32_t *x = (uint32_t *) & (buffer[i]);
+	*x = dest;
 
-  return LH_SUCCESS;
+	return LH_SUCCESS;
 }
 
 /*
@@ -119,13 +117,11 @@ int inj_build_rel_jump(unsigned char* buffer, uintptr_t jump_destination, uintpt
   ;
   LH_VERBOSE(4, "Raw op: "LX, raw_op);
 
-
   uint32_t shuffled =
     ((raw_op >> 16) & 0xFFFF)
     |
     ((raw_op & 0xFFFF) << 16)
   ;
-
 
   uint32_t* x = (uint32_t*) buffer;
   *x = shuffled;
@@ -134,75 +130,69 @@ int inj_build_rel_jump(unsigned char* buffer, uintptr_t jump_destination, uintpt
 }
 */
 
-inline void lh_rset_lr(struct user* r, uintptr_t value) {
-  r->regs.uregs[14] = value;
+inline void lh_rset_lr(struct user *r, uintptr_t value) {
+	r->regs.uregs[14] = value;
 }
 
-inline uintptr_t lh_rget_lr(struct user* r) {
-  return r->regs.uregs[14];
+inline uintptr_t lh_rget_lr(struct user *r) {
+	return r->regs.uregs[14];
 }
 
-inline int inj_trap(pid_t pid, struct user* iregs ) {
-   LH_VERBOSE(3,"Copying Null to LR");
-   lh_rset_lr(iregs, 0x0);
-   return LH_SUCCESS;
+inline int inj_trap(pid_t pid, struct user *iregs) {
+	LH_VERBOSE(3, "Copying Null to LR");
+	lh_rset_lr(iregs, 0x0);
+	return LH_SUCCESS;
 }
-int inj_pass_args2func(struct user* iregs,uintptr_t fn,uintptr_t arg1,uintptr_t arg2)
-{
-   LH_VERBOSE(3,"function address is: 0x"LX,fn);
-   LH_VERBOSE(3, "link register is: 0x"LX, lh_rget_lr(iregs));
+int inj_pass_args2func(struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2) {
+	LH_VERBOSE(3, "function address is: 0x" LX, fn);
+	LH_VERBOSE(3, "link register is: 0x" LX, lh_rget_lr(iregs));
 
-    LH_VERBOSE(3,"opying Arg 1 to r0.");
-    iregs->regs.uregs[0] = arg1;
+	LH_VERBOSE(3, "opying Arg 1 to r0.");
+	iregs->regs.uregs[0] = arg1;
 
-    LH_VERBOSE(3,"opying Arg 2 to r1.");
-    iregs->regs.uregs[1] = arg2;
-    lh_rset_ip(iregs, fn);
+	LH_VERBOSE(3, "opying Arg 2 to r1.");
+	iregs->regs.uregs[1] = arg2;
+	lh_rset_ip(iregs, fn);
 
-  return LH_SUCCESS;
+	return LH_SUCCESS;
 
-}
-
-inline void lh_rset_ip(struct user* r, uintptr_t value) {
-  r->regs.uregs[15] = value;
 }
 
-inline uintptr_t lh_rget_ip(struct user* r) {
-  return r->regs.uregs[15];
+inline void lh_rset_ip(struct user *r, uintptr_t value) {
+	r->regs.uregs[15] = value;
 }
 
-
-inline void lh_rset_sp(struct user* r, uintptr_t value) {
-  r->regs.uregs[13] = value;
+inline uintptr_t lh_rget_ip(struct user *r) {
+	return r->regs.uregs[15];
 }
 
-inline uintptr_t lh_rget_sp(struct user* r) {
-  return r->regs.uregs[13];
+inline void lh_rset_sp(struct user *r, uintptr_t value) {
+	r->regs.uregs[13] = value;
 }
 
-inline void lh_rset_ax(struct user* r, uintptr_t value) {
-  r->regs.uregs[0] = value;
+inline uintptr_t lh_rget_sp(struct user *r) {
+	return r->regs.uregs[13];
 }
 
-inline uintptr_t lh_rget_ax(struct user* r) {
-  return r->regs.uregs[0];
+inline void lh_rset_ax(struct user *r, uintptr_t value) {
+	r->regs.uregs[0] = value;
+}
+
+inline uintptr_t lh_rget_ax(struct user *r) {
+	return r->regs.uregs[0];
 }
 inline int lh_redzone() {
-  return 0;
+	return 0;
 }
 
-
-
-void lh_dump_regs(struct user* r)
-{
-    LH_VERBOSE(3, "--------------------------- ARM");
-    LH_VERBOSE(3, "%%pc : 0x"LX, r->regs.uregs[15]);
-    LH_VERBOSE(3, "%%lr : 0x"LX, r->regs.uregs[14]);
-    LH_VERBOSE(3, "%%sp : 0x"LX, r->regs.uregs[13]);
-    LH_VERBOSE(3, "%%fp : 0x"LX, r->regs.uregs[11]);
-    LH_VERBOSE(3, "%%r0 : 0x"LX, r->regs.uregs[0]);
-    LH_VERBOSE(3, "%%r0 : 0x"LX, r->regs.uregs[1]);
-    LH_VERBOSE(3, "%%r0 : 0x"LX, r->regs.uregs[2]);
-    LH_VERBOSE(3, "%%r0 : 0x"LX, r->regs.uregs[3]);
+void lh_dump_regs(struct user *r) {
+	LH_VERBOSE(3, "--------------------------- ARM");
+	LH_VERBOSE(3, "%%pc : 0x" LX, r->regs.uregs[15]);
+	LH_VERBOSE(3, "%%lr : 0x" LX, r->regs.uregs[14]);
+	LH_VERBOSE(3, "%%sp : 0x" LX, r->regs.uregs[13]);
+	LH_VERBOSE(3, "%%fp : 0x" LX, r->regs.uregs[11]);
+	LH_VERBOSE(3, "%%r0 : 0x" LX, r->regs.uregs[0]);
+	LH_VERBOSE(3, "%%r0 : 0x" LX, r->regs.uregs[1]);
+	LH_VERBOSE(3, "%%r0 : 0x" LX, r->regs.uregs[2]);
+	LH_VERBOSE(3, "%%r0 : 0x" LX, r->regs.uregs[3]);
 }
-
