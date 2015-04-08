@@ -1,0 +1,17 @@
+# object files
+*.o
+
+# automake cache
+autom4te.cache
+
+# automake artifacts
+configure
+makefile
+config.log
+config.status
+config.h
+config.h.in
+autoscan.log
+
+# build artifacts
+bin
