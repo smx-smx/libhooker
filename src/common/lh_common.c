@@ -5,17 +5,67 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <ctype.h>
+#include <fcntl.h>
 
 #include "lh_common.h"
 
 int lh_verbose = 0;
+int lh_stdout = STDOUT_FILENO;
+
+void lh_stdout_set(int fd){
+	lh_stdout = fd;
+}
+void lh_stdout_clear(){
+	lh_stdout = -1;
+}
+int lh_stdout_getcurrent(){
+	return lh_stdout;
+}
+
+void lh_vaprintf(const char *fmt, va_list ap){
+	if(lh_stdout > -1){
+		vdprintf(lh_stdout, fmt, ap);
+	} else {
+		vprintf(fmt, ap);
+	}
+}
+
+void lh_printf(const char *fmt, ...){
+	va_list ap;
+	va_start(ap, fmt);
+	lh_vaprintf(fmt, ap);
+	va_end(ap);
+}
+
+int lh_get_stdout(char *tty){
+	if(strstr(tty, "pipe:") != NULL){
+		uintptr_t start = (uintptr_t)strchr(tty, '[');
+		uintptr_t end = (uintptr_t)strchr(tty, ']');
+		if(start == 0 || end == 0){
+			return -1;
+		}
+		start += 1; //skip '[' char
+		size_t sz = end-start;
+		char *pipeno = malloc(sz);
+		strncpy(pipeno, (char *)start, sz);
+		int fd = atoi(pipeno);
+		lh_stdout_set(fd);
+		return 0;
+	} else {
+		int fd = open(tty, O_RDWR);
+		if(fd < 0) return -1;
+		lh_stdout_set(fd);
+		return 0;
+	}
+	return -1;
+}
+
 void lh_print(int verbose, int newline, char *fn, int lineno, const char *fmt, ...) {
 
 #ifndef DEBUG
 	if (verbose > lh_verbose)
 		return;
 #endif
-
 	printf("[%s:%d] ", fn, lineno);
 
 	va_list arglist;

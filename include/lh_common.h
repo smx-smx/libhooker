@@ -27,6 +27,12 @@ extern int lh_verbose;
 void lh_print(int verbose, int newline, char *fn, int lineno, const char *fmt, ...);
 void lh_hexdump(char *desc, void *addr, int len);
 
+void lh_printf(const char *fmt, ...);
+void lh_stdout_set(int fd);
+void lh_stdout_clear();
+int lh_stdout_getcurrent();
+int lh_get_stdout(char *tty);
+
 #    define WHEREARG  __FILE__, __LINE__
 #    define LH_PRINT(...) lh_print(0,1, WHEREARG, __VA_ARGS__)
 #    define LH_VERBOSE(N,...) lh_print(N,1, WHEREARG, __VA_ARGS__)
