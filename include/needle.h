@@ -14,6 +14,9 @@
 #    include "inject.h"
 
 #    define LH_LIB_MAX 128
+
+extern char *g_tty;
+
 typedef struct {
 	lh_main_process_t proc;
 

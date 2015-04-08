@@ -147,7 +147,7 @@ int inj_pass_args2func(struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr
 	LH_VERBOSE(3, "function address is: 0x" LX, fn);
 	LH_VERBOSE(3, "link register is: 0x" LX, lh_rget_lr(iregs));
 
-	LH_VERBOSE(3, "opying Arg 1 to r0.");
+	LH_VERBOSE(3, "copying Arg 1 to r0.");
 	iregs->regs.uregs[0] = arg1;
 
 	LH_VERBOSE(3, "opying Arg 2 to r1.");
@@ -192,7 +192,15 @@ void lh_dump_regs(struct user *r) {
 	LH_VERBOSE(3, "%%sp : 0x" LX, r->regs.uregs[13]);
 	LH_VERBOSE(3, "%%fp : 0x" LX, r->regs.uregs[11]);
 	LH_VERBOSE(3, "%%r0 : 0x" LX, r->regs.uregs[0]);
-	LH_VERBOSE(3, "%%r0 : 0x" LX, r->regs.uregs[1]);
-	LH_VERBOSE(3, "%%r0 : 0x" LX, r->regs.uregs[2]);
-	LH_VERBOSE(3, "%%r0 : 0x" LX, r->regs.uregs[3]);
+	LH_VERBOSE(3, "%%r1 : 0x" LX, r->regs.uregs[1]);
+	LH_VERBOSE(3, "%%r2 : 0x" LX, r->regs.uregs[2]);
+	LH_VERBOSE(3, "%%r3 : 0x" LX, r->regs.uregs[3]);
+	LH_VERBOSE(3, "%%r4 : 0x" LX, r->regs.uregs[4]);
+	LH_VERBOSE(3, "%%r5 : 0x" LX, r->regs.uregs[5]);
+	LH_VERBOSE(3, "%%r6 : 0x" LX, r->regs.uregs[6]);
+	LH_VERBOSE(3, "%%r7 : 0x" LX, r->regs.uregs[7]);
+	LH_VERBOSE(3, "%%r8 : 0x" LX, r->regs.uregs[8]);
+	LH_VERBOSE(3, "%%r9 : 0x" LX, r->regs.uregs[9]);
+	LH_VERBOSE(3, "%%r10: 0x" LX, r->regs.uregs[10]);
+	
 }

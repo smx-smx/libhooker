@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <sys/wait.h>
@@ -489,6 +490,10 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 	size_t tgtsz = 0;
 	size_t procsz = 0;
 	int rc = LH_SUCCESS;
+	
+	uintptr_t dlopen_handle;
+	bool oneshot = true;
+	
 	unsigned char *mdata = NULL;
 
 	/* calculate the size to allocate */
@@ -578,14 +583,14 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 		if ((rc = inj_setexecwaitget(lh, "dlopen", &iregs)) != LH_SUCCESS)
 			break;
 		// Get the dlopen result
-		result = lh_rget_ax(&iregs);
-		LH_VERBOSE(1, "Dll opened at 0x" LX, result);
-		if(!result){
+		dlopen_handle = lh_rget_ax(&iregs);
+		LH_VERBOSE(1, "Dll opened at 0x" LX, dlopen_handle);
+		if(!dlopen_handle){
 			LH_ERROR("dlopen failed: pathname %s cannot be found\n", heap);
 			break;
 		}
 		if (out_libaddr)
-			*out_libaddr = result;
+			*out_libaddr = dlopen_handle;
 
 		/* 
 			Verify that the library load succeded by probung /proc/<pid>/maps,
@@ -630,21 +635,42 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 				break;
 			}
 
+			uintptr_t ttyptr = 0;
+			if(g_tty != NULL){
+				LH_VERBOSE(2, "Copying tty name to target...");
+				size_t sz = strlen(g_tty) + 1;
+				if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
+					break;
+				if ((rc = inj_pass_args2func(&iregs, (uintptr_t) lh->fn_malloc, sz, 0)) != LH_SUCCESS)
+					break;
+				if ((rc = inj_setexecwaitget(lh, "malloc", &iregs)) != LH_SUCCESS)
+					break;
+				
+				ttyptr = result = lh_rget_ax(&iregs);
+				if(!result){
+					LH_ERROR("malloc failed!\n");
+					break;
+				}
+				if ((rc = inj_copydata(lh->proc.pid, ttyptr, (const unsigned char *)g_tty, sz)) != LH_SUCCESS)
+					break;
+			}
+			
 			// Call autoinit_pre before hook (if specified in the settings)
 			if (hook_settings->autoinit_pre != NULL) {
 				LH_VERBOSE(2, "Calling autoinit_pre " LX, hook_settings->autoinit_pre);
-
 				if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
 					break;
-				if ((rc = inj_pass_args2func(&iregs, (uintptr_t) hook_settings->autoinit_pre, heap + dllsz + 1, 0)) != LH_SUCCESS)
+				if ((rc = inj_pass_args2func(&iregs, (uintptr_t) hook_settings->autoinit_pre, heap + dllsz + 1, ttyptr)) != LH_SUCCESS)
 					break;
 				if ((rc = inj_setexecwaitget(lh, "autoinit_pre", &iregs)) != LH_SUCCESS)
 					break;
+				LH_VERBOSE(2, "Registers after call");
+				//lh_dump_regs(&iregs);
 				result = lh_rget_ax(&iregs);
 				LH_VERBOSE(2, "returned: %d", (int)result);
 
 				if (result != LH_SUCCESS) {
-					LH_VERBOSE(1, "Not continueing, autoinit_pre is not successful");
+					LH_VERBOSE(1, "Not continuing, autoinit_pre is not successful");
 					break;
 				}
 			}
@@ -692,8 +718,9 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 
 				hook_successful = 0;
 
-				if (fnh->hook_kind == LHM_FN_HOOK_TRAILING)
+				if (fnh->hook_kind == LHM_FN_HOOK_TRAILING){
 					break;
+				}
 
 				if (!fnh->hook_fn) {
 					LH_PRINT("ERROR: hook_settings->fn_hooks[%d], hook_fn is null", fni);
@@ -861,6 +888,7 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 				}
 
 				hook_successful = 1;
+				oneshot = false;
 
 				fni++;
 				fnh = &(hook_settings->fn_hooks[fni]);
@@ -878,6 +906,21 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 			}
 
 		} while (0);
+
+		if(oneshot){
+			LH_VERBOSE(1, "Freeing library handle " LX, dlopen_handle);
+			// Encode call to dlopen
+			if ((rc = inj_pass_args2func(&iregs, lh->fn_dlclose, dlopen_handle, 0)) != LH_SUCCESS)
+				break;
+			// Call dlopen and wait for completion
+			if ((rc = inj_setexecwaitget(lh, "dlclose", &iregs)) != LH_SUCCESS)
+				break;
+			// Get the dlopen result
+			result = lh_rget_ax(&iregs);
+			if(result != 0){
+				LH_ERROR("dlclose() failed!\n");
+			}
+		}
 
 		// Cleanup part
 		// Restore the original registers

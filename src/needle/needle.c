@@ -6,12 +6,14 @@
 #include <stdarg.h>
 #include <ctype.h>
 
+#include "util.h"
 #include "needle.h"
 
 #define APP_NAME "needle"
-
 int g_libraries = 0;
 pid_t g_pid = 0;
+
+char *g_tty = NULL;
 
 uint64_t parse_address(const char *s) {
 	if (0 == strncmp(s, "0x", 2))
@@ -107,6 +109,10 @@ int main(int argc, char *argv[]) {
 		if (LH_SUCCESS != (re = lh_attach(session, g_pid)))
 			break;
 
+		g_tty = calloc(1, 50);
+		readlink("/proc/self/fd/0", g_tty, 50);
+		LH_PRINT("Running on TTY: %s\n", g_tty);
+		
 		int i;
 		for (i = g_libraries; i < argc; i++) {
 			//inject the libraries specified by the user
