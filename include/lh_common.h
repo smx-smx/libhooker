@@ -21,7 +21,7 @@
 #    include <string.h>
 
 #    define LH_SUCCESS 0
-#    define LH_ONESHOT 1
+#    define LH_FAILURE 1
 
 extern int lh_verbose;
 void lh_print(int verbose, int newline, char *fn, int lineno, const char *fmt, ...);

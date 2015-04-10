@@ -6,10 +6,10 @@ inline int inj_absjmp_opcode_bytes() {
 	return 5 + 1;
 }
 
-int inj_build_rel_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address) {
-	uintptr_t operand = jump_destination - jump_opcode_address - 5;
+int inj_build_rel_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t source) {
+	uintptr_t operand = jump_destination - source - 5;
 
-	LH_VERBOSE(4, "REL JUMP (X64) TO " LX " FROM " LX " IS: " LX, jump_destination, jump_opcode_address, operand);
+	LH_VERBOSE(4, "REL JUMP (X64) TO " LX " FROM " LX " IS: " LX, jump_destination, source, operand);
 
 	uint32_t lo = (uint32_t) (operand);
 
@@ -21,7 +21,7 @@ int inj_build_rel_jump(unsigned char *buffer, uintptr_t jump_destination, uintpt
 	return LH_SUCCESS;
 }
 
-int inj_build_abs_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address) {
+int inj_build_abs_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t source) {
 	uint32_t lo = (uint32_t) jump_destination;
 
 	int i = 0;

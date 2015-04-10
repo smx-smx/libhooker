@@ -4,8 +4,10 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <stdint.h>
-#include <sys/wait.h>
 #include <dlfcn.h>
+#include <sys/wait.h>
+#include <sys/mman.h>
+#include <errno.h>
 
 #include "needle.h"
 #include "inject.h"
@@ -192,8 +194,9 @@ static int inj_wait(pid_t pid) {
  * Fetches and returns the registers of the tracked pid
  */
 static int inj_get_regs(pid_t pid, struct user *regs) {
-	if (!regs)
+	if (!regs){
 		return -1;
+	}
 	memset(regs, 0, sizeof(*regs));
 	if (ptrace(PTRACE_GETREGS, pid, NULL, regs) < 0) {
 		LH_ERROR_SE("Ptrace Getregs failed");
@@ -320,8 +323,9 @@ int inj_setexecwaitget(lh_session_t * lh, const char *fn, struct user *iregs) {
 		if ((rc = inj_wait(lh->proc.pid)) != LH_SUCCESS)
 			break;
 		LH_VERBOSE(2, "Getting registers.");
-		if ((rc = inj_get_regs(lh->proc.pid, iregs)) != LH_SUCCESS)
+		if ((rc = inj_get_regs(lh->proc.pid, iregs)) != LH_SUCCESS){
 			break;
+		}
 	} while (0);
 
 	return rc;
@@ -413,17 +417,34 @@ static void *inj_blowdata(pid_t pid, uintptr_t src_in_remote, size_t datasz) {
 }
 
 /*
- * Stores data in "pokedata" in the tracked pid at address "target_in_remote"
+ * Stores data in "data" in the tracked pid at address "target_in_remote"
  * Size of the data is the pointer size on the host machine
  */
-int inj_pokedata(pid_t pid, uintptr_t target_in_remote, uintptr_t pokedata) {
+int inj_pokedata(pid_t pid, uintptr_t destaddr, uintptr_t data) {
 	int err = 0;
-	LH_VERBOSE(3, "Pokedata: %p", (void *)pokedata);
-	if (ptrace(PTRACE_POKEDATA, pid, target_in_remote, (void *)pokedata) < 0) {
+	LH_VERBOSE(3, "Poke Data: 0x%x", (void *)data);
+	if (ptrace(PTRACE_POKEDATA, pid, destaddr, (void *)data) < 0) {
 		LH_ERROR_SE("Ptrace PokeText failed with error", pid, strerror(err));
 		return -1;
 	}
 	return LH_SUCCESS;
+}
+
+uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function, char *funcname, uintptr_t arg0, uintptr_t arg1){
+
+	errno = LH_SUCCESS;
+	// Pause the process
+	if ((errno = inj_trap(lh->proc.pid, iregs)) != LH_SUCCESS){
+		return 0;
+	}
+	// Encode call to function
+	if ((errno = inj_pass_args2func(iregs, function, arg0, arg1)) != LH_SUCCESS)
+		return 0;
+	// Call function and wait for completion
+	if ((errno = inj_setexecwaitget(lh, funcname, iregs)) != LH_SUCCESS)
+		return 0;
+	// Return result
+	return lh_rget_ax(iregs);
 }
 
 /*
@@ -433,6 +454,7 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 	int i;
 	for (i = 1; i <= 8192; i++)	// 4096*4096 => +-16 MBytes
 	{
+		// If memory is already mapped, do nothing
 		if (lib_to_hook->mmap)
 			return;
 
@@ -445,18 +467,8 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 		uintptr_t wanted_address = (uintptr_t) address;
 		LH_VERBOSE(4, "Wanted address for mmap: " LX, wanted_address);
 
-		int rc;
-		// Pause the process
-		if ((rc = inj_trap(lh->proc.pid, iregs)) != LH_SUCCESS)
-			break;
-		// Encode call to mmap with address and size
-		if ((rc = inj_pass_args2func(iregs, lhm_mmap, wanted_address, MMAP_SIZE)) != LH_SUCCESS)
-			break;
-		// Run the call and wait for completion
-		if ((rc = inj_setexecwaitget(lh, "lhm_mmap", iregs)) != LH_SUCCESS)
-			break;
-
-		uintptr_t returned = lh_rget_ax(iregs);
+		uintptr_t returned = lh_call_func(lh, iregs, lhm_mmap, "mmap", wanted_address, MMAP_SIZE);
+		if(errno) break;
 		LH_VERBOSE(2, "returned: " LX, returned);
 
 		// If the memory has been mapped at the wanted address
@@ -466,13 +478,9 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 			lib_to_hook->mmap_end = lib_to_hook->mmap_begin + MMAP_SIZE;
 			return;
 		}
-		// The OS allocated memory somewhere else, we just dont want it.
-		if ((rc = inj_trap(lh->proc.pid, iregs)) != LH_SUCCESS)
-			break;
-		if ((rc = inj_pass_args2func(iregs, lhm_munmap, returned, MMAP_SIZE)) != LH_SUCCESS)
-			break;
-		if ((rc = inj_setexecwaitget(lh, "lhm_munmap", iregs)) != LH_SUCCESS)
-			break;
+		// Free the memory mapped by the OS
+		lh_call_func(lh, iregs, lhm_munmap, "munmap", returned, MMAP_SIZE);
+		if(errno) break;
 	}
 
 }
@@ -480,38 +488,44 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 /*
  * Loads a library shared object (module) in the target (must be built with -fPIC!)
  * lh			=> Session object
- * dll			=> Path of the library to load
+ * dllPath			=> Path of the library to load
  * out_libaddr	=> (optional) Where to store the address of the loaded library (relative in the tracked process)
  */
-int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr) {
-	LH_PRINT("Loading: %s into %d (%s)", dll, lh->proc.pid, lh->proc.exename);
+int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_libaddr) {
+	LH_PRINT("Loading: %s into %d (%s)", dllPath, lh->proc.pid, lh->proc.exename);
 
-	size_t dllsz = 0;
-	size_t tgtsz = 0;
-	size_t procsz = 0;
+	size_t dllPath_strsz = 0; //length of the library string
+	size_t lh_struct_size = 0; //size of the process info structure
+	size_t final_size = 0; //final size
 	int rc = LH_SUCCESS;
 	
-	uintptr_t dlopen_handle;
+	uintptr_t dlopen_handle; //handle in target process of the library
+	/*	
+		Flag that indicates if we are hooking functions or just running code
+		Gets set to false if the hook settings section is empty.
+		In such case, the library will be closed with dlclose after code execution
+	*/
 	bool oneshot = true;
 	
-	unsigned char *mdata = NULL;
+	unsigned char *localMemory = NULL; //used to hold the data
 
 	/* calculate the size to allocate */
-	dllsz = strlen(dll) + 1;
-	procsz = sizeof(lh_main_process_t);
-	tgtsz = dllsz + procsz + 32;	/* general buffer */
-	tgtsz = (tgtsz > 1024) ? tgtsz : 1024;
+	dllPath_strsz = strlen(dllPath) + 1;
+	lh_struct_size = sizeof(lh_main_process_t);
+	final_size = dllPath_strsz + lh_struct_size + 32;	/* general buffer */
+	//final_size = (final_size > 1024) ? final_size : 1024;
 
 	/* align the memory */
-	tgtsz += (tgtsz % sizeof(void *) == 0) ? 0 : (sizeof(void *) - (tgtsz % sizeof(void *)));
-	mdata = calloc(sizeof(unsigned char), tgtsz);
-	if (!mdata) {
+	int remainder = 0;
+	final_size += ((remainder = final_size % sizeof(void *)) == 0) ? 0 : (sizeof(void *) - remainder);
+	localMemory = calloc(1, final_size);
+	if (!localMemory) {
 		LH_ERROR_SE("malloc");
 		return -1;
 	}
-	memcpy(mdata, dll, dllsz);
-	memcpy(mdata + dllsz + 1, &(lh->proc), procsz);
-	LH_VERBOSE(1, "Allocating " LU " bytes in the target.\n", tgtsz);
+	memcpy(localMemory, dllPath, dllPath_strsz);
+	memcpy(localMemory + dllPath_strsz + 1, &(lh->proc), lh_struct_size);
+	LH_VERBOSE(1, "Allocating " LU " bytes in the target.\n", final_size);
 
 	do {
 		uintptr_t result = 0;
@@ -546,51 +560,37 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 		}
 
 		/* We're now going to call malloc to allocate the path of the library we want to load */
-
-		// Pause the process
-		if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
-			break;
-		// Encode call to malloc
-		if ((rc = inj_pass_args2func(&iregs, lh->fn_malloc, tgtsz, 0)) != LH_SUCCESS)
-			break;
-		lh_dump_regs(&iregs);
-		// Call malloc and wait for completion
-		if ((rc = inj_setexecwaitget(lh, "malloc", &iregs)) != LH_SUCCESS)
-			break;
-		lh_dump_regs(&iregs);
-		// Get the malloc result
-		heap = result = lh_rget_ax(&iregs);
-		if(!result){
+		heap = result = lh_call_func(lh, &iregs, lh->fn_malloc, "malloc", final_size, 0);
+		if(errno) break;
+		
+		if(!heap){
 			LH_ERROR("malloc failed!\n");
 			break;
 		}
 
 		// Copy the path to the target process
-		LH_VERBOSE(2, "Copying " LU " bytes to 0x" LX, tgtsz, result);
-		if (!result)
+		LH_VERBOSE(2, "Copying " LU " bytes to 0x" LX, final_size, heap);
+		if (!heap)
 			break;
-		// Copy "mdata" to the address of the allocated memory (held in "result" from the previous malloc call)
-		if ((rc = inj_copydata(lh->proc.pid, result, mdata, tgtsz)) != LH_SUCCESS)
+		// Copy "localMemory" to the address of the allocated memory (held in "heap" from the previous malloc call)
+		if ((rc = inj_copydata(lh->proc.pid, heap, localMemory, final_size)) != LH_SUCCESS)
 			break;
 
-		// Stop the process again
-		if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
-			break;
-		// Encode call to dlopen
-		if ((rc = inj_pass_args2func(&iregs, lh->fn_dlopen, result, (RTLD_LAZY | RTLD_GLOBAL))) != LH_SUCCESS)
-			break;
-		// Call dlopen and wait for completion
-		if ((rc = inj_setexecwaitget(lh, "dlopen", &iregs)) != LH_SUCCESS)
-			break;
-		// Get the dlopen result
-		dlopen_handle = lh_rget_ax(&iregs);
-		LH_VERBOSE(1, "Dll opened at 0x" LX, dlopen_handle);
+		// Call dlopen and get result
+		dlopen_handle = lh_call_func(lh, &iregs, lh->fn_dlopen, "dlopen", heap, (RTLD_NOW | RTLD_GLOBAL));
+		if(errno) break;
+		
+		LH_VERBOSE(1, "library opened at 0x" LX, dlopen_handle);
 		if(!dlopen_handle){
 			LH_ERROR("dlopen failed: pathname %s cannot be found\n", heap);
 			break;
 		}
 		if (out_libaddr)
 			*out_libaddr = dlopen_handle;
+			
+		//free the pathname
+		lh_call_func(lh, &iregs, lh->fn_free, "free", result, 0);
+		if(errno) break;
 
 		/* 
 			Verify that the library load succeded by probung /proc/<pid>/maps,
@@ -601,8 +601,8 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 			lh->ld_maps = ld_load_maps(lh->proc.pid, &lh->ld_maps_num);
 
 			struct ld_procmaps *lib_just_loaded;
-			// Iterate the maps looking for "dll" (the library path)
-			if (ld_find_library(lh->ld_maps, lh->ld_maps_num, dll, true, &lib_just_loaded) != LH_SUCCESS) {
+			// Iterate the maps looking for "dllPath" (the library path)
+			if (ld_find_library(lh->ld_maps, lh->ld_maps_num, dllPath, true, &lib_just_loaded) != LH_SUCCESS) {
 				LH_ERROR("Couldnt find the loaded library in proc/maps");
 				break;
 			}
@@ -639,14 +639,8 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 			if(g_tty != NULL){
 				LH_VERBOSE(2, "Copying tty name to target...");
 				size_t sz = strlen(g_tty) + 1;
-				if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
-					break;
-				if ((rc = inj_pass_args2func(&iregs, (uintptr_t) lh->fn_malloc, sz, 0)) != LH_SUCCESS)
-					break;
-				if ((rc = inj_setexecwaitget(lh, "malloc", &iregs)) != LH_SUCCESS)
-					break;
-				
-				ttyptr = result = lh_rget_ax(&iregs);
+				ttyptr = result = lh_call_func(lh, &iregs, lh->fn_malloc, "malloc", sz, 0);
+				if(errno) break;
 				if(!result){
 					LH_ERROR("malloc failed!\n");
 					break;
@@ -658,15 +652,15 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 			// Call autoinit_pre before hook (if specified in the settings)
 			if (hook_settings->autoinit_pre != NULL) {
 				LH_VERBOSE(2, "Calling autoinit_pre " LX, hook_settings->autoinit_pre);
-				if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
-					break;
-				if ((rc = inj_pass_args2func(&iregs, (uintptr_t) hook_settings->autoinit_pre, heap + dllsz + 1, ttyptr)) != LH_SUCCESS)
-					break;
-				if ((rc = inj_setexecwaitget(lh, "autoinit_pre", &iregs)) != LH_SUCCESS)
-					break;
+				
+				result = lh_call_func(lh, &iregs, (uintptr_t) hook_settings->autoinit_pre, "autoinit_pre", heap + dllPath_strsz + 1, ttyptr);
+				if(errno) break;
+				lh_call_func(lh, &iregs, lh->fn_free, "free", ttyptr, 0);
+				if(errno) break;
+				
 				LH_VERBOSE(2, "Registers after call");
-				//lh_dump_regs(&iregs);
-				result = lh_rget_ax(&iregs);
+				lh_dump_regs(&iregs);
+				
 				LH_VERBOSE(2, "returned: %d", (int)result);
 
 				if (result != LH_SUCCESS) {
@@ -760,12 +754,27 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 					break;
 				}
 
+				#if 0
+				//If we haven't allocated a payload buffer yet
+				if (lib_to_hook->mmap == 0)
+					// Allocate MMAP_SIZE bytes for our payload
+					lib_to_hook->mmap = lh_call_func(lh, &iregs, lhm_mmap, "mmap", 0, MMAP_SIZE);
+					if(errno) break;
+
+				if (lib_to_hook->mmap == (intptr_t)MAP_FAILED) {
+					LH_ERROR("mmap did not work :(");
+					break;
+				}
+				lib_to_hook->mmap_begin = lib_to_hook->mmap;
+				lib_to_hook->mmap_end = lib_to_hook->mmap_begin + MMAP_SIZE;
+				#endif
+				
 				//If we haven't allocated a payload buffer yet
 				if (lib_to_hook->mmap == 0)
 					// Allocate MMAP_SIZE bytes for our payload
 					inj_find_mmap(lh, &iregs, lib_to_hook, lhm_mmap, lhm_munmap);
-
-				if (lib_to_hook->mmap == 0) {
+					
+				if (lib_to_hook->mmap == (intptr_t)MAP_FAILED) {
 					LH_ERROR("mmap did not work :(");
 					break;
 				}
@@ -776,27 +785,47 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 					-> Create a backup of the first 16 bytes (LHM_FN_COPY_BYTES) of the original function, and store it in the map. The map now contains a part of the original function code
 					-> Go after opcode_bytes_to_restore in the new map, and place a relative jump to the remaining part of the code (in the original address space)
 					-> After this relative jump, place the absolute jump to the replacement code address in the lib/module.
-					-> Create a jump trampoline, to make a near jump to the absolute jump, that will in turn jump to the replacement code. Store this trampoline in the original addres,
+					-> Create a jump trampoline, to make a near jump to the absolute jump, that will in turn jump to the replacement code. Store this trampoline in the original address,
 					   Overwriting the original code
+					   
+					________________________________________________________
+					|                     MAPPED MEM                       |
+					|------------------------------------------------------|
+					|  OCODE:	original code chunk                        |
+					|------------------------------------------------------|
+					|                      PAYLOAD                         |
+					|------------------------------------------------------|
+					| RELJMP:	relative jump to remaining code            |
+					| ABSJMP:	absolute jump to replacement code          |
+					|                                                      |
+					| ..........                                           |
+					| <in function being replaced>                         |
+					| jump ABSJMP (in place of original code)              |
+					| REMAINING ORIGINAL CODE                              |
+					|                                                      |
+					|______________________________________________________|
+					
+					To call the original function, one can jump to OCODE.
+					The first part of the function is executed, and then RELJMP is taken (and we move to REMAINING ORIGINAL CODE)
 				*/
 
+				// Position of payload in target address space 
 				uintptr_t r_payload_start = lib_to_hook->mmap;
-				size_t hook_area = fnh->opcode_bytes_to_restore + rel_jump_size + abs_jump_size;
-				uintptr_t mmap_after_hooked = lib_to_hook->mmap + hook_area;
+				// Size of the trampolines
+				size_t payload_size = rel_jump_size + abs_jump_size;
+				
+				size_t hook_area = fnh->opcode_bytes_to_restore + payload_size;
+				uintptr_t mmap_after_payload = lib_to_hook->mmap + hook_area;
 
-				if ((mmap_after_hooked > lib_to_hook->mmap_end) || (lib_to_hook->mmap + LHM_FN_COPY_BYTES > lib_to_hook->mmap_end)) {
+				if ((mmap_after_payload > lib_to_hook->mmap_end) || (lib_to_hook->mmap + LHM_FN_COPY_BYTES > lib_to_hook->mmap_end)) {
 					LH_PRINT("ERROR: not enough memory for hook_settings->fn_hooks[%d]", fni);
 					break;
 				}
 
-				// Copy LHM_FN_COPY_BYTES bytes (16) of the original function to mmapped area
-				if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
-					break;
-				if ((rc = inj_pass_args2func(&iregs, lhm_memcpy, lib_to_hook->mmap, symboladdr)) != LH_SUCCESS) // lh_memcpy has size hardcoded to value defined in LHM_FN_COPY_BYTES
-					break;
-				if ((rc = inj_setexecwaitget(lh, "lhm_memcpy", &iregs)) != LH_SUCCESS)
-					break;
-				if (lib_to_hook->mmap != lh_rget_ax(&iregs)) {
+				// Copy LHM_FN_COPY_BYTES bytes (16) of the original function to mmapped area (OCODE)
+				result = lh_call_func(lh, &iregs, lhm_memcpy, "lhm_memcpy", lib_to_hook->mmap, symboladdr); // lh_memcpy has size hardcoded to value defined in LHM_FN_COPY_BYTES
+				
+				if (errno || lib_to_hook->mmap != result) {
 					LH_ERROR("Failed to copy original bytes");
 					break;
 				}
@@ -805,86 +834,77 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 				lib_to_hook->mmap += fnh->opcode_bytes_to_restore;
 
 				uintptr_t r_new_payload_address = lib_to_hook->mmap;
-				size_t new_payload_size = rel_jump_size + abs_jump_size;
-
+				
 				// Allocate space for the payload
-				unsigned char *l_new_payload = (unsigned char *)malloc(new_payload_size);
+				unsigned char *l_new_payload = (unsigned char *)malloc(payload_size);
 				if (!l_new_payload) {
 					LH_ERROR_SE("malloc");
-					break;
+					goto error;
 				}
 
 				unsigned char *l_new_payload_start = l_new_payload;
 
 				LH_VERBOSE(4, "REL JUMP CALCULATION: this is the place, where the control flow must jump back to the original place");
-				// JUMP from payload to original code (skip the original bytes that have been replaced to avoid loop)
-				if (LH_SUCCESS != inj_build_rel_jump(l_new_payload, symboladdr + fnh->opcode_bytes_to_restore, r_new_payload_address)) {
+				// JUMP from payload to original code (skip the original bytes that have been replaced to avoid loop) (RELJMP)
+				if (LH_SUCCESS != inj_build_rel_jump(l_new_payload_start, symboladdr + fnh->opcode_bytes_to_restore, r_new_payload_address)) {
 					LH_ERROR("Unable to build relative jump");
-					break;
+					goto error;
 				}
 				lib_to_hook->mmap += rel_jump_size;
 				l_new_payload += rel_jump_size;
 
-				// Call the replacement function with an absolute jump
+				// Call the replacement function with an absolute jump (ABSJMP)
 				uintptr_t r_hook_abs_jump_address = lib_to_hook->mmap;
 				if (LH_SUCCESS != inj_build_abs_jump(l_new_payload, fnh->hook_fn, r_new_payload_address + rel_jump_size)) {
 					LH_ERROR("Unable to build absolute jump");
-					break;
+					goto error;
 				}
 				lib_to_hook->mmap += abs_jump_size;
 				l_new_payload += abs_jump_size;
 
 				// assert
-				if (lib_to_hook->mmap != mmap_after_hooked) {
+				if (lib_to_hook->mmap != mmap_after_payload) {
 					LH_ERROR("Seems we broke up something, mmap address is not the same as wanted");
-					break;
+					goto error;
 				}
 
-				// Write the jumps
-				if (LH_SUCCESS != inj_copydata(lh->proc.pid, r_new_payload_address, l_new_payload_start, new_payload_size)) {
+				// Copy payload to tracked program
+				if (LH_SUCCESS != inj_copydata(lh->proc.pid, r_new_payload_address, l_new_payload_start, payload_size)) {
 					LH_ERROR("Unable to copy payload");
-					break;
+					goto error;
 				}
 
 				// We store the original function address, if wanted
 				if (fnh->orig_function_ptr != 0) {
 					if (LH_SUCCESS != inj_pokedata(lh->proc.pid, fnh->orig_function_ptr, r_addr_to_call_orig_fn)) {
 						LH_ERROR("Failed to copy original bytes");
-						break;
+						goto error;
 					}
 				}
 
 				LH_VERBOSE(4, "REL JUMP CALCULATION: and now we overwrite the original function with our jump to the payload");
-				//JUMP from symboladdr to TRAMPOLINE
+				//JUMP from symboladdr to TRAMPOLINE (r_hook_abs_jump_address)
 				if (LH_SUCCESS != inj_build_rel_jump(l_new_payload_start, r_hook_abs_jump_address, symboladdr)) {
 					LH_ERROR("Failed to build relative jump for the replacement");
-					break;
+					goto error;
 				}
 
 				LH_VERBOSE(4, "------------------------------------- replacing first opcodes for %s/%s begin:", fnh->libname, fnh->symname);
 				// Copy the jump to trampoline in place of the original function
 				if (LH_SUCCESS != inj_copydata(lh->proc.pid, symboladdr, l_new_payload_start, rel_jump_size)) {
 					LH_ERROR("Unable to copy back relative jump into the original function");
-					break;
+					goto error;
 				}
 				LH_VERBOSE(4, "------------------------------------- replacing first opcodes for %s/%s end", fnh->libname, fnh->symname);
 
 				if (lh_verbose > 3) {
 					LH_VERBOSE(4, "Dumping the overwritten original function");
-					if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
-						break;
-					if ((rc = inj_pass_args2func(&iregs, lhm_hexdump, symboladdr, 0x10)) != LH_SUCCESS)
-						break;
-					if ((rc = inj_setexecwaitget(lh, "lhm_hexdump", &iregs)) != LH_SUCCESS)
-						break;
+					lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", symboladdr, 0x10);
+					if(errno) break;
 
 					LH_VERBOSE(4, "Dumping the corresponding payload area");
-					if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
-						break;
-					if ((rc = inj_pass_args2func(&iregs, lhm_hexdump, r_payload_start, hook_area)) != LH_SUCCESS)
-						break;
-					if ((rc = inj_setexecwaitget(lh, "lhm_hexdump", &iregs)) != LH_SUCCESS)
-						break;
+					lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", r_payload_start, hook_area);
+					if(errno) break;
 				}
 
 				hook_successful = 1;
@@ -892,31 +912,36 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 
 				fni++;
 				fnh = &(hook_settings->fn_hooks[fni]);
-		}
-			//If the hook succeded and the used defined a post hook function, call it
-			if ((hook_settings->autoinit_post != NULL) && (hook_successful)) {
-				LH_VERBOSE(2, "Calling autoinit_post " LX, hook_settings->autoinit_post);
 
-				if ((rc = inj_trap(lh->proc.pid, &iregs)) != LH_SUCCESS)
+				if(l_new_payload_start)
+					free(l_new_payload_start);
+
+				continue;
+				error:
+					LH_ERROR("HOOK FAILED!");
+					if(lib_to_hook->mmap != 0){
+						LH_VERBOSE(3, "Freeing the memory map");
+						lh_call_func(lh, &iregs, lhm_munmap, "munmap", lib_to_hook->mmap, MMAP_SIZE);
+						if(errno) break;
+					}
+					if(l_new_payload_start)
+						free(l_new_payload_start);
 					break;
-				if ((rc = inj_pass_args2func(&iregs, (uintptr_t) hook_settings->autoinit_post, heap + dllsz + 1, 0)) != LH_SUCCESS)
-					break;
-				if ((rc = inj_setexecwaitget(lh, "autoinit_post", &iregs)) != LH_SUCCESS)
-					break;
+				
 			}
-
+			
+			//If the hook succeded and the used defined a post hook function, call it
+			if (hook_successful && hook_settings->autoinit_post != NULL){
+				LH_VERBOSE(2, "Calling autoinit_post " LX, hook_settings->autoinit_post);
+				lh_call_func(lh, &iregs, (uintptr_t) hook_settings->autoinit_post, "autoinit_post", heap + dllPath_strsz + 1, 0);
+				if(errno) break;
+			}
 		} while (0);
 
 		if(oneshot){
 			LH_VERBOSE(1, "Freeing library handle " LX, dlopen_handle);
-			// Encode call to dlopen
-			if ((rc = inj_pass_args2func(&iregs, lh->fn_dlclose, dlopen_handle, 0)) != LH_SUCCESS)
-				break;
-			// Call dlopen and wait for completion
-			if ((rc = inj_setexecwaitget(lh, "dlclose", &iregs)) != LH_SUCCESS)
-				break;
-			// Get the dlopen result
-			result = lh_rget_ax(&iregs);
+			result = lh_call_func(lh, &iregs, lh->fn_dlclose, "dlclose", dlopen_handle, 0);
+			if(errno) break;
 			if(result != 0){
 				LH_ERROR("dlclose() failed!\n");
 			}
@@ -939,9 +964,9 @@ int lh_inject_library(lh_session_t * lh, const char *dll, uintptr_t *out_libaddr
 			break;
 	} while (0);
 
-	if (mdata)
-		free(mdata);
-	mdata = NULL;
+	if (localMemory)
+		free(localMemory);
+	localMemory = NULL;
 
 	return rc;
 

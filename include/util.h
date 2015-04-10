@@ -32,10 +32,6 @@
 #define CALL(rettype, foo_name, params...)		\
 	((rettype (*)(params))sym2addr(#foo_name))
 
-
-void *sym2addr(const char *name);
-const char *addr2sym(const void *addr);
-
 const char *backtrace(void);
 
 #endif
