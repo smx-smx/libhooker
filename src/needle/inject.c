@@ -499,7 +499,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 	size_t final_size = 0; //final size
 	int rc = LH_SUCCESS;
 	
-	uintptr_t dlopen_handle; //handle in target process of the library
+	uintptr_t dlopen_handle = 0; //handle in target process of the library
 	/*	
 		Flag that indicates if we are hooking functions or just running code
 		Gets set to false if the hook settings section is empty.
@@ -577,12 +577,12 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 			break;
 
 		// Call dlopen and get result
-		dlopen_handle = lh_call_func(lh, &iregs, lh->fn_dlopen, "dlopen", heap, (RTLD_NOW | RTLD_GLOBAL));
-		if(errno) break;
+		dlopen_handle = lh_call_func(lh, &iregs, lh->fn_dlopen, "dlopen", heap, (RTLD_LAZY | RTLD_GLOBAL));
 		
 		LH_VERBOSE(1, "library opened at 0x" LX, dlopen_handle);
-		if(!dlopen_handle){
-			LH_ERROR("dlopen failed: pathname %s cannot be found\n", heap);
+		if(!dlopen_handle || errno){
+			LH_ERROR("dlopen failed!");
+			lh_dump_regs(&iregs);
 			break;
 		}
 		if (out_libaddr)
