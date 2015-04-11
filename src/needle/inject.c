@@ -735,6 +735,18 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				uintptr_t symboladdr = 0;
 				if (fnh->hook_kind == LHM_FN_HOOK_BY_NAME) {
 					symboladdr = ld_find_address(lib_to_hook, fnh->symname, NULL);
+					if(symboladdr == 0){
+						size_t symname_strsz = strlen(fnh->symname) + 1;
+						result = lh_call_func(lh, &iregs, lh->fn_malloc, "malloc", symname_strsz, 0);				
+						if(result == 0){
+							LH_ERROR("Can't malloc symbol name");
+							break;
+						}
+						if ((rc = inj_copydata(lh->proc.pid, result, (unsigned char *)fnh->symname, symname_strsz)) != LH_SUCCESS)
+							break;
+						symboladdr = lh_call_func(lh, &iregs, lh->fn_dlsym, "dlsym", (uintptr_t)RTLD_DEFAULT, result);
+						lh_call_func(lh, &iregs, lh->fn_free, "free", result, 0);
+					}
 				} else if (fnh->hook_kind == LHM_FN_HOOK_BY_OFFSET) {
 					symboladdr = lib_to_hook->addr_begin + fnh->sym_offset;
 				}
@@ -743,6 +755,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					LH_PRINT("ERROR: hook_settings->fn_hooks[%d] was not found.", fni);
 					break;
 				}
+				LH_VERBOSE(2, "%s resolved to "LX, fnh->symname, symboladdr);
 
 				// Get the number of bytes required to build an absolute jump
 				int abs_jump_size = inj_absjmp_opcode_bytes();
@@ -753,21 +766,6 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					LH_PRINT("ERROR: we need to overwrite %d bytes (%d bytes of opcode to restore specified)", rel_jump_size, fnh->opcode_bytes_to_restore);
 					break;
 				}
-
-				#if 0
-				//If we haven't allocated a payload buffer yet
-				if (lib_to_hook->mmap == 0)
-					// Allocate MMAP_SIZE bytes for our payload
-					lib_to_hook->mmap = lh_call_func(lh, &iregs, lhm_mmap, "mmap", 0, MMAP_SIZE);
-					if(errno) break;
-
-				if (lib_to_hook->mmap == (intptr_t)MAP_FAILED) {
-					LH_ERROR("mmap did not work :(");
-					break;
-				}
-				lib_to_hook->mmap_begin = lib_to_hook->mmap;
-				lib_to_hook->mmap_end = lib_to_hook->mmap_begin + MMAP_SIZE;
-				#endif
 				
 				//If we haven't allocated a payload buffer yet
 				if (lib_to_hook->mmap == 0)
