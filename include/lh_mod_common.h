@@ -31,7 +31,7 @@ typedef struct {
 
 typedef struct {
 	int version;
-	int (*autoinit_pre) (lh_main_process_t *);
+	int (*autoinit_pre) (lh_main_process_t *, char *tty);
 	void (*autoinit_post) (lh_main_process_t *);
 	lh_fn_hook_t fn_hooks[LHM_MAX_FN_HOOKS];
 } lh_hook_t;

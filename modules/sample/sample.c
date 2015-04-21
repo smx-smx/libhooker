@@ -8,7 +8,7 @@ void hooked_autoinit_post(lh_main_process_t * proc) {
 	LH_PRINT("This function is called after the wanted functions are hooked.");
 }
 
-int hooked_autoinit(lh_main_process_t * proc) {
+int hooked_autoinit(lh_main_process_t * proc, char *tty) {
 
 	original_test_function = NULL;
 

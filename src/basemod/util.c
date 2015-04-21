@@ -45,14 +45,14 @@ void *sym2addr(const char *name)
 	return addr;
 }
 
-const char *addr2sym(const void *addr)
+const char *addr2sym(uintptr_t addr)
 {
-	const char *name = symfile_name_by_addr((uint32_t)addr);
+	const char *name = symfile_name_by_addr(addr);
 
 	if (name == NULL) {
 		Dl_info info;
 
-		if (dladdr(addr, &info) == 0)
+		if (dladdr((void *)addr, &info) == 0)
 			return NULL;
 
 		name = info.dli_sname;

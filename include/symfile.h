@@ -57,9 +57,9 @@ extern struct sym_table sym_table;
 
 
 int symfile_load(const char *sym_fname);
-uint32_t symfile_addr_by_name(const char *name);
-const char *symfile_name_by_addr(uint32_t addr);
+uintptr_t symfile_addr_by_name(const char *name);
+const char *symfile_name_by_addr(uintptr_t addr);
 void *sym2addr(const char *name);
-const char *addr2sym(const void *addr);
+const char *addr2sym(uintptr_t addr);
 
 #endif

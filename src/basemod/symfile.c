@@ -157,20 +157,21 @@ int symfile_load(const char *fname)
 	return 0;
 }
 
-uint32_t symfile_addr_by_name(const char *name)
+uintptr_t symfile_addr_by_name(const char *name)
 {
 	unsigned i;
 	for (i = 0; i < sym_table.n_symbols; ++i) {
 		char *sym_name = sym_table.sym_name + sym_table.sym_entry[i].sym_name_off;
 
-		if (strcmp(sym_name, name) == 0)
-			return sym_table.sym_entry[i].addr;
+		if (strcmp(sym_name, name) == 0){
+			return (uintptr_t)sym_table.sym_entry[i].addr;
+		}
 	}
 
 	return 0;
 }
 
-const char *symfile_name_by_addr(uint32_t addr)
+const char *symfile_name_by_addr(uintptr_t addr)
 {
 	int i;
 	for (i = sym_table.n_symbols - 1; i >= 0; --i) {
