@@ -41,6 +41,9 @@ typedef struct {
 
 int inj_pokedata(pid_t pid, uintptr_t target, uintptr_t pokedata);
 
+size_t inj_getjmp_size();
+int inj_build_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address);
+
 int inj_build_rel_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address);
 int inj_reljmp_opcode_bytes();
 int inj_build_abs_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address);

@@ -760,7 +760,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				// Get the number of bytes required to build an absolute jump
 				int abs_jump_size = inj_absjmp_opcode_bytes();
 				// Get the number of bytes required to build a relative jump
-				int rel_jump_size = inj_reljmp_opcode_bytes();
+				int rel_jump_size = inj_getjmp_size();
 				// Check that the user provided enough bytes to replace in the hook settings
 				if (fnh->opcode_bytes_to_restore < rel_jump_size) {
 					LH_PRINT("ERROR: we need to overwrite %d bytes (%d bytes of opcode to restore specified)", rel_jump_size, fnh->opcode_bytes_to_restore);
@@ -793,7 +793,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					|------------------------------------------------------|
 					|                      PAYLOAD                         |
 					|------------------------------------------------------|
-					| RELJMP:	relative jump to remaining code            |
+					| RELJMP:	relative jump to remaining code            | //absolute if LH_JUMP_ABS is defined
 					| ABSJMP:	absolute jump to replacement code          |
 					|                                                      |
 					| ..........                                           |
@@ -842,10 +842,10 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 				unsigned char *l_new_payload_start = l_new_payload;
 
-				LH_VERBOSE(4, "REL JUMP CALCULATION: this is the place, where the control flow must jump back to the original place");
+				LH_VERBOSE(4, "REL/ABS JUMP CALCULATION: this is the place, where the control flow must jump back to the original place");
 				// JUMP from payload to original code (skip the original bytes that have been replaced to avoid loop) (RELJMP)
-				if (LH_SUCCESS != inj_build_rel_jump(l_new_payload_start, symboladdr + fnh->opcode_bytes_to_restore, r_new_payload_address)) {
-					LH_ERROR("Unable to build relative jump");
+				if (LH_SUCCESS != inj_build_jump(l_new_payload_start, symboladdr + fnh->opcode_bytes_to_restore, r_new_payload_address)) {
+					LH_ERROR("Unable to build relative/absolute jump");
 					goto error;
 				}
 				lib_to_hook->mmap += rel_jump_size;
@@ -880,17 +880,17 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					}
 				}
 
-				LH_VERBOSE(4, "REL JUMP CALCULATION: and now we overwrite the original function with our jump to the payload");
+				LH_VERBOSE(4, "REL/ABS JUMP CALCULATION: and now we overwrite the original function with our jump to the payload");
 				//JUMP from symboladdr to TRAMPOLINE (r_hook_abs_jump_address)
-				if (LH_SUCCESS != inj_build_rel_jump(l_new_payload_start, r_hook_abs_jump_address, symboladdr)) {
-					LH_ERROR("Failed to build relative jump for the replacement");
+				if (LH_SUCCESS != inj_build_jump(l_new_payload_start, r_hook_abs_jump_address, symboladdr)) {
+					LH_ERROR("Failed to build relative/absolute jump for the replacement");
 					goto error;
 				}
 
 				LH_VERBOSE(4, "------------------------------------- replacing first opcodes for %s/%s begin:", fnh->libname, fnh->symname);
 				// Copy the jump to trampoline in place of the original function
 				if (LH_SUCCESS != inj_copydata(lh->proc.pid, symboladdr, l_new_payload_start, rel_jump_size)) {
-					LH_ERROR("Unable to copy back relative jump into the original function");
+					LH_ERROR("Unable to copy back relative/absolute jump into the original function");
 					goto error;
 				}
 				LH_VERBOSE(4, "------------------------------------- replacing first opcodes for %s/%s end", fnh->libname, fnh->symname);

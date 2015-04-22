@@ -36,5 +36,6 @@ done
 for file in $(eval find "$dirs" -type f "$namearg"); do
 	echo "Reindenting ${file}..."
 	my_indent "$file"
+	chmod "$file" 644
 done
 exit 0
