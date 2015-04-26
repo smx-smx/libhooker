@@ -54,6 +54,28 @@ pid_t parse_pid(char *s) {
 	return (pid_t) re;
 }
 
+char *readlink_safe(char *filename){
+	size_t bufferSize = 1;
+	char *buf = calloc(1, bufferSize);
+	if(!buf){
+		LH_ERROR_SE("Not enough memory");
+		return NULL;
+	}
+	while(1){
+		int c = readlink(filename, buf, bufferSize);
+		if(c < 0){
+			LH_ERROR_SE("readlink");
+			return NULL;
+		} else if(c == bufferSize) {
+			buf = realloc(buf, bufferSize+1);
+			memset(buf+(bufferSize++), 0x0, 1);
+			continue;
+		} else {
+			return buf;
+		}
+	}
+}
+
 int parse_opts(int argc, char *argv[]) {
 
 	if (argc == 1)
@@ -109,17 +131,27 @@ int main(int argc, char *argv[]) {
 		if (LH_SUCCESS != (re = lh_attach(session, g_pid)))
 			break;
 
-		g_tty = calloc(1, 50);
-		readlink("/proc/self/fd/0", g_tty, 50);
+		g_tty = readlink_safe("/proc/self/fd/0");
+		if(!g_tty){
+			return EXIT_FAILURE;
+		}
 		LH_PRINT("Running on TTY: %s\n", g_tty);
 		
 		int i;
 		for (i = g_libraries; i < argc; i++) {
+			char *libpath = realpath(argv[i], NULL);
+			if(!libpath){
+				return EXIT_FAILURE;
+			}
 			//inject the libraries specified by the user
 			if (LH_SUCCESS != (re = lh_inject_library(session, argv[i], NULL))) {
+				free(libpath);
 				break;
 			}
+			free(libpath);
 		}
+
+		free(g_tty);
 
 		//detach from the process
 		re |= lh_detach(session);
