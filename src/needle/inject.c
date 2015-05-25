@@ -339,7 +339,7 @@ static int inj_peekdata(pid_t pid, uintptr_t src_in_remote, uintptr_t *outpeek) 
 	int err = 0;
 	long peekdata = ptrace(PTRACE_PEEKDATA, pid, src_in_remote, NULL);
 	err = errno;
-	LH_VERBOSE(3, "Peekdata: %p", (void *)peekdata);
+	LH_VERBOSE(4, "Peekdata: %p", (void *)peekdata);
 	if (peekdata == -1 && err != 0) {
 		LH_ERROR_SE("Ptrace PeekText failed with error");
 		return -1;
@@ -379,7 +379,7 @@ static int inj_copydata(pid_t pid, uintptr_t target, const unsigned char *data, 
 		for (jdx = 0; jdx < pksz && pos < datasz; ++jdx)
 			((unsigned char *)&pokedata)[jdx] = data[pos++];
 
-		LH_VERBOSE(3, "Pokedata: %p", pokedata);
+		LH_VERBOSE(4, "Pokedata: %p", pokedata);
 		if (ptrace(PTRACE_POKEDATA, pid, target + idx, pokedata) < 0) {
 			LH_ERROR_SE("Ptrace PokeText failed with error");
 			return -1;
@@ -434,17 +434,22 @@ uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function
 
 	errno = LH_SUCCESS;
 	// Pause the process
+
+       LH_VERBOSE(2, "CALLING: %s with 0x" LX " 0x" LX "\n", funcname, arg0, arg1);
+
 	if ((errno = inj_trap(lh->proc.pid, iregs)) != LH_SUCCESS){
 		return 0;
 	}
 	// Encode call to function
-	if ((errno = inj_pass_args2func(iregs, function, arg0, arg1)) != LH_SUCCESS)
+	if ((errno = inj_pass_args2func(lh->proc.pid, iregs, function, arg0, arg1)) != LH_SUCCESS)
 		return 0;
 	// Call function and wait for completion
 	if ((errno = inj_setexecwaitget(lh, funcname, iregs)) != LH_SUCCESS)
 		return 0;
 	// Return result
-	return lh_rget_ax(iregs);
+        uintptr_t re = lh_rget_ax(iregs);
+        LH_VERBOSE(2, "RETURNED: " LX "\n", re);
+	return re;
 }
 
 /*
@@ -588,9 +593,6 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 		if (out_libaddr)
 			*out_libaddr = dlopen_handle;
 			
-		//free the pathname
-		lh_call_func(lh, &iregs, lh->fn_free, "free", result, 0);
-		if(errno) break;
 
 		/* 
 			Verify that the library load succeded by probung /proc/<pid>/maps,
@@ -640,7 +642,6 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				LH_VERBOSE(2, "Copying tty name to target...");
 				size_t sz = strlen(g_tty) + 1;
 				ttyptr = result = lh_call_func(lh, &iregs, lh->fn_malloc, "malloc", sz, 0);
-				if(errno) break;
 				if(!result){
 					LH_ERROR("malloc failed!\n");
 					break;

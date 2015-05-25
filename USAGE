@@ -75,10 +75,16 @@ lh_hook_t hook_settings = {
           // you need to check the original function in a disassembler
           // first and set this value to full size of the overwritten
           // opcodes.
+          //
           // With relative jump we overwrite:
           //   ARM: 4 bytes
           //   x64: 5 bytes
           //  i386: 5 bytes
+          //
+          // With absolute jump we overwrite:
+          //   ARM: 8 bytes
+          //   x64: 14 bytes
+          //  i386: 6 bytes
           .opcode_bytes_to_restore = 8
     },
     {

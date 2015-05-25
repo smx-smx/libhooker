@@ -245,7 +245,7 @@ struct ld_procmaps *ld_load_maps(pid_t pid, size_t * num) {
 		mapnum = 0;
 		while (fgets(buf, bufsz, ff)) {
 			struct ld_procmaps *pm = &maps[mapnum];
-			LH_VERBOSE(3, "Parsing %s", buf);
+			LH_VERBOSE(4, "Parsing %s", buf);
 			if (ld_procmaps_parse(buf, bufsz, pm, appname) < 0) {
 				LH_VERBOSE(1, "Parsing failure. Ignoring.");
 				continue;

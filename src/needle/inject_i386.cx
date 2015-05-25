@@ -43,46 +43,49 @@ inline int inj_trap(pid_t pid, struct user *iregs) {
 	return inj_pokedata(pid, lh_rget_sp(iregs), nullcode);
 }
 
-int inj_pass_args2func(struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2) {
-	LH_VERBOSE(3, "function address is: 0x" LX, FN);
-	LH_VERBOSE(3, "Copying Arg 1 to stack.");
-
+int inj_pass_args2func(pid_t pid, struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2) {
 	int rc;
-	if ((rc = inj_pokedata(lh->pid, inj_rget_sp(&iregs) + sizeof(size_t), arg1)) != LH_SUCCESS)
+
+	LH_VERBOSE(3, "function address is: 0x" LX, fn);
+
+	LH_VERBOSE(3, "Copying Arg 1 to stack.");
+	if ((rc = inj_pokedata(pid, lh_rget_sp(iregs) + sizeof(size_t), arg1)) != LH_SUCCESS)
 		return rc;
 	LH_VERBOSE(3, "Copying Arg 2 to stack.");
-	if ((rc = inj_pokedata(lh->pid, inj_rget_sp(&iregs) + 2 * sizeof(size_t), arg2)) != LH_SUCCESS)
+	if ((rc = inj_pokedata(pid, lh_rget_sp(iregs) + 2 * sizeof(size_t), arg2)) != LH_SUCCESS)
 		return rc;
 
-	inj_rset_ip(iregs, fn);
-	inj_rset_ax(iregs, 0; return LH_SUCCESS;
+	lh_rset_ip(iregs, fn);
+	lh_rset_ax(iregs, 0); 
+
+        return LH_SUCCESS;
 }
 
-inline void inj_rset_ip(struct user *r, uintptr_t value) {
+inline void lh_rset_ip(struct user *r, uintptr_t value) {
 	r->regs.eip = value;
 }
 
-inline uintptr_t inj_rget_ip(struct user *r) {
+inline uintptr_t lh_rget_ip(struct user *r) {
 	return r->regs.eip;
 }
 
-inline void inj_rset_sp(struct user *r, uintptr_t value) {
+inline void lh_rset_sp(struct user *r, uintptr_t value) {
 	r->regs.esp = value;
 }
 
-inline uintptr_t inj_rget_sp(struct user *r) {
+inline uintptr_t lh_rget_sp(struct user *r) {
 	return r->regs.esp;
 }
 
-inline void inj_rset_ax(struct user *r, uintptr_t value) {
+inline void lh_rset_ax(struct user *r, uintptr_t value) {
 	r->regs.eax = value;
 }
 
-inline uintptr_t inj_rget_ax(struct user *r) {
+inline uintptr_t lh_rget_ax(struct user *r) {
 	return r->regs.eax;
 }
 
-inline int inj_redzone() {
+inline int lh_redzone() {
 	return 0;
 }
 

@@ -13,7 +13,8 @@ int hooked_autoinit(lh_main_process_t * proc, char *tty) {
 	original_test_function = NULL;
 
 	LH_PRINT("This function is intended to autorun at each time being injected to an executable.");
-	LH_PRINT("At this time, we were injected into: %d (%s)", proc->pid, proc->exename);
+	LH_PRINT("At this time, we were injected into: %u (%s)", proc->pid, proc->exename);
+	LH_PRINT("TTY: %s", tty);
 
 	return LH_SUCCESS;
 }
@@ -28,7 +29,7 @@ int hooked_otherfunction(int a, char *s) {
 int hooked_testfunction(int a, char *s) {
 	LH_PRINT("We are in the hooked test function! %d %s", a, s);
 
-	LH_PRINT("Lets call the original one with new parameters:");
+	LH_PRINT("Lets call the original one with new parameters: " LX, original_test_function);
 
 	original_test_function(12345, "_____________________ IS THERE ANYBODY IN THERE?");
 
@@ -49,7 +50,15 @@ lh_hook_t hook_settings = {
 			.symname = "otherfunction",
 			.hook_fn = (uintptr_t) hooked_otherfunction,
 			.orig_function_ptr = 0,
+
+#if __x86_64__
+			.opcode_bytes_to_restore = 5
+#elif __i386__
+			.opcode_bytes_to_restore = 7
+#elif __arm__
 			.opcode_bytes_to_restore = 8
+#endif
+
 		},
 		{
 			.hook_kind = LHM_FN_HOOK_BY_NAME,
@@ -57,7 +66,14 @@ lh_hook_t hook_settings = {
 			.symname = "testfunction",
 			.hook_fn = (uintptr_t) hooked_testfunction,
 			.orig_function_ptr = (uintptr_t) & original_test_function, //save the original function address to "original_test_function"
+
+#if __x86_64__
+			.opcode_bytes_to_restore = 5
+#elif __i386__
+			.opcode_bytes_to_restore = 7
+#elif __arm__
 			.opcode_bytes_to_restore = 8
+#endif
 		},
 		{
 			.hook_kind = LHM_FN_HOOK_TRAILING

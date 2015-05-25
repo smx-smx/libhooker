@@ -143,7 +143,7 @@ inline int inj_trap(pid_t pid, struct user *iregs) {
 	lh_rset_lr(iregs, 0x0);
 	return LH_SUCCESS;
 }
-int inj_pass_args2func(struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2) {
+int inj_pass_args2func(pid_t pid, struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2) {
 	LH_VERBOSE(3, "function address is: 0x" LX, fn);
 	LH_VERBOSE(3, "link register is: 0x" LX, lh_rget_lr(iregs));
 

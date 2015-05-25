@@ -206,7 +206,7 @@ static int exe_load_symbol_table(struct elf_internals *ei, Elf_Shdr * symh, Elf_
 					char *name2;
 					int symtype = exe_get_hotpatch_type(syms[idx].st_info,
 														HOTPATCH_SYMBOL_TYPE);
-					LH_VERBOSE(3, "Symbol " LU " is %s at %p type %d size " LU, idx, name, (void *)syms[idx].st_value, symtype, syms[idx].st_size);
+					LH_VERBOSE(5, "Symbol " LU " is %s at %p type %d size " LU, idx, name, (void *)syms[idx].st_value, symtype, syms[idx].st_size);
 					name2 = strdup(name);
 					if (!name2) {
 						LH_ERROR_SE("malloc");
@@ -275,9 +275,9 @@ static int exe_load_section_headers(struct elf_internals *ei) {
 	for (idx = 0; idx < ei->sechdr_num; ++idx) {
 		const char *name = &ei->strsectbl[sechdrs[idx].sh_name];
 		if (name)
-			LH_VERBOSE(2, "Section name: %s Addr: %p Len: " LU, name, (void *)sechdrs[idx].sh_offset, sechdrs[idx].sh_size);
+			LH_VERBOSE(4, "Section name: %s Addr: %p Len: " LU, name, (void *)sechdrs[idx].sh_offset, sechdrs[idx].sh_size);
 		else
-			LH_VERBOSE(2, "Section name: %s Addr: %p Len: " LU, "N/A", (void *)sechdrs[idx].sh_offset, sechdrs[idx].sh_size);
+			LH_VERBOSE(4, "Section name: %s Addr: %p Len: " LU, "N/A", (void *)sechdrs[idx].sh_offset, sechdrs[idx].sh_size);
 
 		switch (sechdrs[idx].sh_type) {
 		case SHT_SYMTAB:
@@ -288,7 +288,7 @@ static int exe_load_section_headers(struct elf_internals *ei) {
 		case SHT_STRTAB:
 			if (idx != ei->secnametbl_idx) {
 				strtab = idx;
-				LH_VERBOSE(2, "Reading symbol table from %s", name);
+				LH_VERBOSE(3, "Reading symbol table from %s", name);
 				if (symtab >= 0 && exe_load_symbol_table(ei, &sechdrs[symtab], &sechdrs[strtab]) < 0) {
 					LH_ERROR("Failed to retrieve symbol table.");
 				}
@@ -326,7 +326,7 @@ static int exe_load_program_headers(struct elf_internals *ei) {
 	proghdrs = (Elf_Phdr *) ei->proghdrs;
 	for (idx = 0; idx < ei->proghdr_num; ++idx) {
 		rc = 0;
-		LH_VERBOSE(2, "Prog-header " LU ": Type: %d " "VAddr: %p PAddr: %p FileSz: " LU " MemSz: " LU, idx, proghdrs[idx].p_type, (void *)proghdrs[idx].p_vaddr, (void *)proghdrs[idx].p_paddr, proghdrs[idx].p_filesz, proghdrs[idx].p_memsz);
+		LH_VERBOSE(4, "Prog-header " LU ": Type: %d " "VAddr: %p PAddr: %p FileSz: " LU " MemSz: " LU, idx, proghdrs[idx].p_type, (void *)proghdrs[idx].p_vaddr, (void *)proghdrs[idx].p_paddr, proghdrs[idx].p_filesz, proghdrs[idx].p_memsz);
 
 		if (proghdrs[idx].p_type == PT_INTERP) {
 			LH_VERBOSE(1, "PT_INTERP section found");
@@ -438,7 +438,7 @@ struct elf_symbol *exe_load_symbols(const char *filename, size_t * symbols_num, 
 	if ((rc = exe_load_headers(&ei)) < 0) {
 		LH_PRINT("Unable to load Elf details for %s", filename);
 	}
-	LH_VERBOSE(3, "Freeing internal structure.");
+	LH_VERBOSE(4, "Freeing internal structure.");
 	if (ei.fd >= 0)
 		close(ei.fd);
 	ei.fd = -1;
