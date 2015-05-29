@@ -285,19 +285,30 @@ void lh_free(lh_session_t ** session) {
 	if(s->proc.exename)
 		free(s->proc.exename);
 
-	if(s->proc.argv && s->proc.argc)
+	if(s->proc.argv && s->proc.argc){
 		for(i=0; i<s->proc.argc; i++)
 			free(s->proc.argv[i]);
+		free(s->proc.argv);
+	}
 
-	if(s->proc.prog_argv && s->proc.prog_argc)
+	if(s->proc.prog_argv && s->proc.prog_argc){
 		for(i=0; i<s->proc.prog_argc; i++)
 			free(s->proc.prog_argv[i]);
+		free(s->proc.prog_argv);
+	}
 
-	if(s->exe_symbols)
+	if(s->exe_symbols){
+		for(i=0; i<s->exe_symbols_num; i++){
+			if(s->exe_symbols[i].name)
+				free(s->exe_symbols[i].name);
+		}
 		free(s->exe_symbols);
+	}
 
-	if(s->ld_maps)
-		free(s->ld_maps);
+	ld_free_maps(s->ld_maps, s->ld_maps_num);
+
+	if(s->exe_interp.name)
+		free(s->exe_interp.name);
 
 	free(s);
 
@@ -716,6 +727,8 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 		*/
 		do {
 			// Get a new copy of the maps after the lib load
+			if(lh->ld_maps)
+				ld_free_maps(lh->ld_maps, lh->ld_maps_num);
 			lh->ld_maps = ld_load_maps(lh->proc.pid, &lh->ld_maps_num);
 
 			struct ld_procmaps *lib_just_loaded;
@@ -1067,6 +1080,8 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				lh_call_func(lh, &iregs, (uintptr_t) hook_settings->autoinit_post, "autoinit_post", r_procmem + r_strBlkSz, 0);
 				if(errno) break;
 			}
+
+			free(hook_settings);
 		} while (0);
 
 		if(oneshot){

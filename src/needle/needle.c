@@ -169,15 +169,20 @@ int main(int argc, char *argv[]) {
 				argSz++;
 				if(ch == 0x00){
 					fseek(pargs, -argSz, SEEK_CUR);
-					arg = malloc(argSz);
+					arg = calloc(1, argSz);
 					fread(arg, argSz, 1, pargs);
 					argSz = 0;
 					if(!prog_argv){
 						//initialize argument vector
-						prog_argv = calloc(1, sizeof(char *) * argp);
+						prog_argv = calloc(sizeof(char *), argp + 1);
 					} else {
 						//add a new argument to argument vector
-						prog_argv = realloc(prog_argv, sizeof(char *) * (argp + 1)); //add a new char *
+						char **tmp = realloc(prog_argv, sizeof(char *) * (argp + 1)); //add a new char *
+						if(!tmp){
+							LH_ERROR_SE("realloc");
+							break;
+						}
+						prog_argv = tmp;
 						prog_argv[argp + 1] = NULL;
 					}
 					prog_argv[argp++] = arg;
