@@ -683,19 +683,13 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				break;
 		}
 
-		rproc->exename = (char *)(r_procmem + strBlkOff);
-
 		if((r_str = inj_strcpy_alloc(lh, &iregs, lh->proc.exename)) == 0)
 			break;
 		r_allocs[r_alloc++] = r_str;
+		rproc->exename = (char *)(r_str);
 		if(inj_ptrcpy(lh, &iregs, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
 			break;
 
-
-		/*if((r_str = inj_strcpy_to(lh, &iregs, r_procmem + strBlkOff + offsetof(lh_r_process_t, dllPath), dllPath)) == 0)
-		break;
-		r_allocs[r_alloc++] = r_str;*/
-	
 
 		LH_VERBOSE(2, "Copying lh_r_process_t to target...");
 		if ((rc = inj_copydata(lh->proc.pid, r_procmem + r_strBlkSz, (uint8_t *)rproc, sizeof(lh_r_process_t))) != LH_SUCCESS)
