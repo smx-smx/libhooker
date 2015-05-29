@@ -17,7 +17,6 @@ int lhm_munmap(uintptr_t address, size_t size) {
 
 uintptr_t lhm_memcpy(uintptr_t dst_address, uintptr_t src_address) {
 	return (uintptr_t) memcpy((void *)dst_address, (void *)src_address, LHM_FN_COPY_BYTES);
-
 }
 
 void lhm_hexdump(uintptr_t address, size_t size) {

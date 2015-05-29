@@ -132,6 +132,8 @@ int main(int argc, char *argv[]) {
 		mod_argv[argp++] = strdup(libpath);
 		mod_argv[argp++] = strdup(cur_tty);
 
+		free(cur_tty);
+
 		int i;
 		for (i = g_optind_lib + 1; i < argc; i++) {
 			//read any extra argument passed on the command line
