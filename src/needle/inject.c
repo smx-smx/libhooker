@@ -299,6 +299,8 @@ void lh_free(lh_session_t ** session) {
 	if(s->ld_maps)
 		free(s->ld_maps);
 
+	free(s);
+
 	end:
 		*session = NULL;
 }
@@ -953,7 +955,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					|                      PAYLOAD                         |
 					|------------------------------------------------------|
 					| RELJMP:	relative jump to remaining code            | //absolute if LH_JUMP_ABS is defined
-					| ABSJMP:	absolute jump to replacement code          | //unused if LH_JUMP_ABS
+					| ABSJMP:	absolute jump to replacement code          |
 					|                                                      |
 					| ..........                                           |
 					| <in function being replaced>                         |
