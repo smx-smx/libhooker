@@ -409,49 +409,6 @@ uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function
 /*
  * Stores "datasz" bytes from "data" into the tracked pid in the address pointed by "target"
  */
-/*int inj_copydata(pid_t pid, uintptr_t target, const unsigned char *data, size_t datasz) {
-	lh_hexdump("data", data, datasz);
-	size_t dpos, idx = 0;
-	uintptr_t word_next;
-	for(dpos = 0; dpos < datasz; ){
-		signed int diff = (dpos + sizeof(uintptr_t)) - datasz;
-		if(diff > 0){
-			printf("Need extra %d bytes\n", diff);
-			word_next = ptrace(PTRACE_PEEKDATA, pid, target + idx, NULL);
-			if(errno){
-				LH_ERROR_SE("PTRACE_PEEK");
-				return -1;
-			}
-			printf("READ: 0x"LX" @0x"LX"\n", word_next, target + idx);
-
-			int i;
-			for(i=0; dpos < datasz && i<sizeof(word_next); i++, dpos++){
-				printf("Insert 0x%1x\n", data[dpos]);
-				((uint8_t *)&(word_next))[i] = data[dpos];
-			}
-
-			printf("WRITE_MERGED: 0x"LX" @0x"LX"\n", (void *)word_next, target + idx);
-
-			if (ptrace(PTRACE_POKEDATA, pid, target + idx, (void *)word_next) < 0) {
-				LH_ERROR_SE("Ptrace PokeText failed with error");
-				return -1;
-			}
-
-			if(dpos >= datasz)
-				break;
-		} else {
-			printf("WRITE: 0x"LX" @0x"LX"\n", *(uintptr_t *)(data+dpos), target + idx);
-			if (ptrace(PTRACE_POKEDATA, pid, target + idx, (void *)(data+dpos)) < 0) {
-				LH_ERROR_SE("Ptrace PokeText failed with error");
-				return -1;
-			}
-			dpos += sizeof(uintptr_t);
-		}
-		if(dpos % sizeof(uintptr_t) == 0)
-			idx += sizeof(uintptr_t);
-	}
-	return LH_SUCCESS;
-}*/
 int inj_copydata(pid_t pid, uintptr_t target, const unsigned char *data, size_t datasz) {
 	size_t pos = 0, idx;
 	for(idx=0; pos < datasz; idx += sizeof(uintptr_t)) {
