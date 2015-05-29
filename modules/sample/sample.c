@@ -21,7 +21,10 @@ int hooked_autoinit(int argc, char **argv) {
 	LH_PRINT("Arguments: %d", argc);
 	int i;
 	for(i=0; i<argc; i++)
-		LH_PRINT("Arg %d => %s", i, argv[i]);
+		LH_PRINT("ModArg %d => %s", i, argv[i]);
+	for(i=0; i<proc->prog_argc; i++)
+		LH_PRINT("ProgArg %d => %s", i, proc->prog_argv[i]);
+	LH_PRINT("exe path => %s", proc->exename);
 	LH_PRINT("");
 	LH_PRINT("");
 	LH_PRINT("");
