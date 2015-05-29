@@ -430,7 +430,6 @@ int inj_copydata(pid_t pid, uintptr_t target, const unsigned char *data, size_t 
 
 		size_t jdx;
 		for (jdx = 0; jdx < sizeof(uintptr_t) && pos < datasz; jdx++, pos++){
-			printf("Insert 0x%1x\n", data[pos]);
 			((uint8_t *)&(pokedata))[jdx] = data[pos];
 		}
 
