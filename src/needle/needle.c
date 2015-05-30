@@ -36,13 +36,14 @@ int print_usage_and_quit(const char *errfmt, ...) {
 
 	fprintf(stderr, "Hooker library, main injection tool\n\n");
 	fprintf(stderr, "Usage:\n %s [-v level] pid ./library_to_inject.so [module args]\n", APP_NAME);
-	fprintf(stderr, "or\n %s [-v level] './program_to_run args' ./library_to_inject.so [module args]\n", APP_NAME);
+	fprintf(stderr, "or\n %s [-v level] [-u uid] [-g gid] './program_to_run args' ./library_to_inject.so [module args]\n", APP_NAME);
 	fprintf(stderr, "   -v: verbose\n");
 	fprintf(stderr, "   -e hex_memory_address: memory address for the injection\n");
 	fprintf(stderr, "                      if not specified, main() will be used (if found)\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, " You can specify the pid of an already running process, or a program you want to run.\n");
-	fprintf(stderr, " In the latter case, the program will be patched on startup.\n");
+	fprintf(stderr, " In the latter case, the program will be hooked on startup.\n");
+	fprintf(stderr, "  You can specify the uid [-u uid] and gid [-g gid] to use for the newly created process.\n");
 	return -3;
 
 }
