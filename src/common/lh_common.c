@@ -64,7 +64,6 @@ lh_r_process_t *lh_get_procinfo(int argc, char **argv){
 	uintptr_t hdr = (uintptr_t)argv;
 
 	uint32_t hdrSz = *(uint32_t *)(hdr + (sizeof(char *) * argc));
-	printf("hdrSz: %zu\n", hdrSz);
 
 	lh_r_process_t *proc = (lh_r_process_t *)(hdr + hdrSz);
 	if(strncmp(proc->magic, "LHFO", sizeof(proc->magic)) != 0) //check the magic
@@ -73,7 +72,10 @@ lh_r_process_t *lh_get_procinfo(int argc, char **argv){
 	/*proc->argv = argv;
 	proc->prog_argv = (char **)(hdr + (sizeof(char *) * argc) + sizeof(hdrSz));*/
 
-	lh_hexdump("hdr", proc, sizeof(*proc));
+	if(proc->lh_verbose > 3){
+		printf("hdrSz: %zu\n", hdrSz);
+		lh_hexdump("hdr", proc, sizeof(*proc));
+	}
 	return proc;
 }
 
