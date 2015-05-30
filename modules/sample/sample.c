@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "lh_mod_common.h"
+#include "lh_module.h"
 #include <sys/mman.h>
 
 void (*original_test_function) (int a, char *b);

@@ -29,7 +29,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "inject.h"
+#include "interface/os/inject_linux.h"
 #include "elf_types.h"
 
 enum {

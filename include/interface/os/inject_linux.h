@@ -3,8 +3,8 @@
  *
  */
 
-#ifndef __HOOKER_NJECT_H
-#    define __HOOKER_NJECT_H
+#ifndef __INTERFACE_INJECT_LINUX_H
+#    define __INTERFACE_INJECT_LINUX_H
 
 #    include <stdlib.h>
 #    include <fcntl.h>

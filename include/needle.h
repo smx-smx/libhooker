@@ -11,7 +11,7 @@
 #    include <unistd.h>
 
 #    include "lh_common.h"
-#    include "inject.h"
+#    include "interface/os/inject_linux.h" //temporary. needs a unified lh_session_t
 
 #    define LH_LIB_MAX 128
 
@@ -39,32 +39,6 @@ typedef struct {
 
 int inj_pokedata(pid_t pid, uintptr_t target, uintptr_t pokedata);
 
-size_t inj_getjmp_size();
-int inj_build_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address);
-
-int inj_build_rel_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address);
-int inj_reljmp_opcode_bytes();
-int inj_build_abs_jump(unsigned char *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address);
-int inj_absjmp_opcode_bytes();
-
-int inj_trap(pid_t pid, struct user *iregs);
-int inj_pass_args2func(pid_t pid, struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2);
-
-void lh_rset_ip(struct user *r, uintptr_t value);
-uintptr_t lh_rget_ip(struct user *r);
-
-void lh_rset_sp(struct user *r, uintptr_t value);
-uintptr_t lh_rget_sp(struct user *r);
-
-void lh_rset_fp(struct user *r, uintptr_t value);
-uintptr_t lh_rget_fp(struct user *r);
-
-void lh_rset_ax(struct user *r, uintptr_t value);
-uintptr_t lh_rget_ax(struct user *r);
-
-int lh_redzone();
-
-void lh_dump_regs(struct user *regs);
 lh_session_t *lh_alloc();
 int lh_attach(lh_session_t * session, pid_t pid);
 int lh_inject_library(lh_session_t * session, const char *library, uintptr_t * out_libaddr);

@@ -32,7 +32,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <sys/stat.h>
-#include "inject.h"
+#include "interface/os/inject_linux.h"
 
 enum {
 	PROCMAPS_PERMS_NONE = 0x0,

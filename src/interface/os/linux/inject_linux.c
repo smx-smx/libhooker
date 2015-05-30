@@ -11,8 +11,9 @@
 #include <errno.h>
 
 #include "needle.h"
-#include "inject.h"
-#include "lh_mod_common.h"
+#include "lh_module.h"
+#include "interface/os/inject_linux.h"
+#include "interface/if_cpu.h"
 
 #define MMAP_SIZE 0x1000 //4096 bytes
 
@@ -843,8 +844,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					break;
 				}
 
-				LH_VERBOSE(1, "Function hook libname: '%s', symbol: '%s', offset: " LX ", opcode bytes to restore: %d", fnh->libname, fnh->symname,
-																													fnh->sym_offset, fnh->opcode_bytes_to_restore);
+				LH_VERBOSE(1, "Function hook libname: '%s', symbol: '%s', offset: " LX, fnh->libname, fnh->symname, fnh->sym_offset);
 				LH_VERBOSE(3, "The replacement function: " LX, fnh->hook_fn);
 
 				// Locate the library specified in the hook section (if any)
@@ -891,10 +891,18 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				#endif
 
 				// Check that the user provided enough bytes to replace in the hook settings
-				if (fnh->opcode_bytes_to_restore < var_jump_size) {
-					LH_PRINT("ERROR: we need to overwrite %d bytes (%d bytes of opcode to restore specified)", var_jump_size, fnh->opcode_bytes_to_restore);
+				uint8_t *rcode = inj_blowdata(lh->proc.pid, symboladdr, LHM_FN_COPY_BYTES);
+				if(rcode == NULL){
+					LH_PRINT("ERROR: Can't read code at 0x"LX, symboladdr);
 					break;
 				}
+				int num_opcode_bytes = inj_getbackup_size(rcode, LHM_FN_COPY_BYTES, var_jump_size);
+				if(num_opcode_bytes < 0){
+					LH_ERROR("Cannot determine number of opcode bytes to save");
+					LH_PRINT("Code size of %d may be too small", LHM_FN_COPY_BYTES);
+				}
+				free(rcode);
+				LH_PRINT("Opcode bytes to save: %d", num_opcode_bytes);
 				
 				//If we haven't allocated a payload buffer yet
 				if (lib_to_hook->mmap == 0)
@@ -945,7 +953,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				size_t payload_size = rel_jump_size + abs_jump_size;
 				#endif
 
-				size_t hook_area = fnh->opcode_bytes_to_restore + payload_size;
+				size_t hook_area = num_opcode_bytes + payload_size;
 				uintptr_t mmap_after_payload = lib_to_hook->mmap + hook_area;
 
 				if ((mmap_after_payload > lib_to_hook->mmap_end) || (lib_to_hook->mmap + LHM_FN_COPY_BYTES > lib_to_hook->mmap_end)) {
@@ -962,7 +970,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				}
 
 				uintptr_t r_addr_to_call_orig_fn = lib_to_hook->mmap;
-				lib_to_hook->mmap += fnh->opcode_bytes_to_restore;
+				lib_to_hook->mmap += num_opcode_bytes;
 
 				uintptr_t r_new_payload_address = lib_to_hook->mmap;
 				
@@ -978,7 +986,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				LH_VERBOSE(4, "REL/ABS JUMP CALCULATION: this is the place, where the control flow must jump back to the original place");
 
 				// JUMP from payload to original code (skip the original bytes that have been replaced to avoid loop) (RELJMP)
-				if (LH_SUCCESS != inj_build_jump(l_new_payload_start, symboladdr + fnh->opcode_bytes_to_restore, r_new_payload_address)) {
+				if (LH_SUCCESS != inj_build_jump(l_new_payload_start, symboladdr + num_opcode_bytes, r_new_payload_address)) {
 					LH_ERROR("Unable to build relative/absolute jump");
 					goto error;
 				}
