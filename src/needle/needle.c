@@ -5,13 +5,16 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <ctype.h>
+#include <sched.h>
+#include <sys/resource.h>
 
 #include "util.h"
 #include "needle.h"
 
 #define APP_NAME "needle"
-int g_optind_lib = 0;
+int g_optind_lib = 0, g_optind_exe = 0;
 pid_t g_pid = 0;
+int g_uid = -1, g_gid = -1;
 
 uint64_t parse_address(const char *s) {
 	if (0 == strncmp(s, "0x", 2))
@@ -32,24 +35,16 @@ int print_usage_and_quit(const char *errfmt, ...) {
 	}
 
 	fprintf(stderr, "Hooker library, main injection tool\n\n");
-	fprintf(stderr, "Usage:\n %s [-v level] pid library.so [module args]\n", APP_NAME);
+	fprintf(stderr, "Usage:\n %s [-v level] pid ./library_to_inject.so [module args]\n", APP_NAME);
+	fprintf(stderr, "or\n %s [-v level] './program_to_run args' ./library_to_inject.so [module args]\n", APP_NAME);
 	fprintf(stderr, "   -v: verbose\n");
 	fprintf(stderr, "   -e hex_memory_address: memory address for the injection\n");
 	fprintf(stderr, "                      if not specified, main() will be used (if found)\n");
 	fprintf(stderr, "\n");
-	fprintf(stderr, " pid is the process id you want to hook\n");
-	fprintf(stderr, " Then list of libraries you want to inject\n\n");
-
+	fprintf(stderr, " You can specify the pid of an already running process, or a program you want to run.\n");
+	fprintf(stderr, " In the latter case, the program will be patched on startup.\n");
 	return -3;
 
-}
-
-pid_t parse_pid(char *s) {
-	int re = atoi(s);
-	if (re <= 0)
-		print_usage_and_quit("invalid pid specified: %s", s);
-
-	return (pid_t) re;
 }
 
 int parse_opts(int argc, char *argv[]) {
@@ -58,11 +53,17 @@ int parse_opts(int argc, char *argv[]) {
 		return print_usage_and_quit(NULL);
 
 	char c;
-	while ((c = getopt(argc, argv, "v:")) != -1) {
+	while ((c = getopt(argc, argv, "v:u:g:")) != -1) {
 		switch (c) {
 		case 'v':
 			lh_verbose = atoi(optarg);
 			LH_VERBOSE(4, "verbose set to %d", lh_verbose);
+			break;
+		case 'u':
+			g_uid = atoi(optarg);
+			break;
+		case 'g':
+			g_gid = atoi(optarg);
 			break;
 		case '?':
 			if (isprint(optopt))
@@ -77,9 +78,15 @@ int parse_opts(int argc, char *argv[]) {
 
  sogood:
 	if (argc == optind)
-		return print_usage_and_quit("pid missing");
+		return print_usage_and_quit("Missing pid or path to executable to run!");
 
-	g_pid = parse_pid(argv[optind++]);
+	pid_t pid_val = atoi(argv[optind]);
+	if (pid_val <= 0){
+		g_optind_exe = optind;
+	} else {
+		g_pid = pid_val;
+	}
+	optind++;
 
 	if (argc == optind)
 		return print_usage_and_quit("no libraries specified");
@@ -87,6 +94,16 @@ int parse_opts(int argc, char *argv[]) {
 	g_optind_lib = optind;
 
 	return LH_SUCCESS;
+}
+
+int runProc(void *arg){
+	char **argv = *((char ***)arg);
+	if(g_uid > -1)
+		setresuid(g_uid, g_uid, g_uid);
+	if(g_gid > -1)
+		setresgid(g_gid, g_gid, g_gid);
+
+	return execv(argv[0], argv);
 }
 
 int main(int argc, char *argv[]) {
@@ -103,6 +120,73 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 		
+		if(!g_pid){
+			if(!g_optind_exe){
+				print_usage_and_quit("Missing pid or path to executable to run!");
+				return EXIT_FAILURE;
+			} else {
+				LH_PRINT("Executing '%s'", argv[g_optind_exe]);
+				char **exec_args = NULL;
+				char *args = strdup(argv[g_optind_exe]);
+				char *tok = strtok(args, " ");
+				int ntok = 0;
+				if(!tok || access(tok, F_OK) < 0){
+					LH_ERROR("Executable '%s' does not exist!", tok);
+					return EXIT_FAILURE;
+				}
+
+				while(tok){
+					if(!exec_args)
+						exec_args = calloc(sizeof(char *), ntok + 1);
+					else
+						exec_args = realloc(exec_args, sizeof(char *) * (ntok + 1));
+					exec_args[ntok++] = strdup(tok);
+	
+					tok = strtok(NULL, " ");
+				}
+
+				if(!args){
+					LH_ERROR_SE("strdup");
+					return EXIT_FAILURE;
+				}
+				free(args);
+
+				struct rlimit rl;
+				if(getrlimit(RLIMIT_STACK, &rl) < 0){
+					LH_ERROR_SE("getrlimit");
+					return EXIT_FAILURE;
+				}
+				void *stack_end = calloc(1, rl.rlim_cur);
+				if(!stack_end){
+					LH_ERROR_SE("malloc");
+					return EXIT_FAILURE;
+				}
+				
+				void *stack_start = (void *)((uintptr_t)stack_end + rl.rlim_cur); //stack grows downwards
+
+				if((g_pid = clone(runProc, stack_start, CLONE_VFORK | CLONE_VM, &exec_args)) < 0){
+					LH_ERROR_SE("clone");
+					free(stack_end);
+					return EXIT_FAILURE;
+				}
+
+				/*if((g_pid = fork()) == 0){
+					LH_PRINT("Running '%s'", exec_args[0]);
+					int i;
+					for(i=0; i<ntok; i++) printf("tok %s\n", exec_args[i]);
+					if(execv(exec_args[0], exec_args) < 0){
+						LH_ERROR_SE("execv");
+						return EXIT_FAILURE;
+					}
+				} else {
+					int i;
+					for(i=0; i<ntok; i++)
+						free(exec_args[i]);
+					free(exec_args);
+				}*/
+			}
+		}
+
 		//start tracking the pid specified by the user
 		if (LH_SUCCESS != (re = lh_attach(session, g_pid)))
 			break;
