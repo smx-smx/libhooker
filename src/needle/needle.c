@@ -126,7 +126,6 @@ int main(int argc, char *argv[]) {
 				print_usage_and_quit("Missing pid or path to executable to run!");
 				return EXIT_FAILURE;
 			} else {
-				LH_PRINT("Executing '%s'", argv[g_optind_exe]);
 				char **exec_args = NULL;
 				char *args = strdup(argv[g_optind_exe]);
 				char *tok = strtok(args, " ");
@@ -165,26 +164,12 @@ int main(int argc, char *argv[]) {
 				
 				void *stack_start = (void *)((uintptr_t)stack_end + rl.rlim_cur); //stack grows downwards
 
+				LH_PRINT("Launching executable '%s'", argv[g_optind_exe]);
 				if((g_pid = clone(runProc, stack_start, CLONE_VFORK | CLONE_VM, &exec_args)) < 0){
 					LH_ERROR_SE("clone");
 					free(stack_end);
 					return EXIT_FAILURE;
 				}
-
-				/*if((g_pid = fork()) == 0){
-					LH_PRINT("Running '%s'", exec_args[0]);
-					int i;
-					for(i=0; i<ntok; i++) printf("tok %s\n", exec_args[i]);
-					if(execv(exec_args[0], exec_args) < 0){
-						LH_ERROR_SE("execv");
-						return EXIT_FAILURE;
-					}
-				} else {
-					int i;
-					for(i=0; i<ntok; i++)
-						free(exec_args[i]);
-					free(exec_args);
-				}*/
 			}
 		}
 
