@@ -3,7 +3,6 @@
 #include <stdint.h>
 
 const char *addr2sym(uintptr_t addr);
-int create_log(const char *fname);
 lh_r_process_t *lh_get_procinfo(int argc, char **argv);
 int lh_get_stdout(char *tty);
 void lh_printf(const char *fmt, ...);
@@ -15,7 +14,6 @@ void lhm_hexdump(uintptr_t address, size_t size);
 uintptr_t lhm_memcpy(uintptr_t dst_address, uintptr_t src_address);
 uintptr_t lhm_mmap(uintptr_t address, size_t size);
 int lhm_munmap(uintptr_t address, size_t size);
-void say(unsigned level, const char *format, ...);
 void *sym2addr(const char *name);
 uintptr_t symfile_addr_by_name(const char *name);
 int symfile_load(const char *fname);

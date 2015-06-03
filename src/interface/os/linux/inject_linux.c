@@ -507,10 +507,9 @@ int inj_ptrcpy(lh_session_t *lh, struct user *iregs, uintptr_t dstaddr, uintptr_
  * Size of the data is the pointer size on the host machine
  */
 int inj_pokedata(pid_t pid, uintptr_t destaddr, uintptr_t data) {
-	int err = 0;
 	LH_VERBOSE(3, "Poke Data: 0x%x", (void *)data);
 	if (ptrace(PTRACE_POKEDATA, pid, destaddr, (void *)data) < 0) {
-		LH_ERROR_SE("Ptrace PokeText failed with error", pid, strerror(err));
+		LH_ERROR_SE("Ptrace PokeText failed with error");
 		return -1;
 	}
 	return LH_SUCCESS;

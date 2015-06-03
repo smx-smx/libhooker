@@ -185,6 +185,12 @@ esac
 case "$1" in
 	clean)
 		build_cmd="${build_cmd} clean"
+		if [ -d "obj" ]; then
+			rm -r "obj";
+		fi
+		if [ -d "bin" ] && [ $(ls -1a bin | wc -l) -gt 2 ]; then
+			rm -r bin/*
+		fi
 		;;
 	'')
 		;;

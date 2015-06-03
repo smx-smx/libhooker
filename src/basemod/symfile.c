@@ -26,11 +26,6 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include <symfile.h>
-
-#include <log.h>
-
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -40,6 +35,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "lh_common.h"
+#include "symfile.h"
 
 #define MAGIC 0xB12791EE
 
@@ -75,13 +72,12 @@ int symfile_load(const char *fname)
 
 	fd = open(fname, O_RDONLY);
 	if (fd == -1) {
-		say_error("can't open `%s': %m", fname);
-
+		LH_ERROR("can't open `%s': %m", fname);
 		return -1;
 	}
 
 	if (fstat(fd, &st_buf) != 0) {
-		say_error("fstat for `%s' is failed: %m", fname);
+		LH_ERROR("fstat for `%s' is failed: %m", fname);
 
 		return -1;
 	}
@@ -90,26 +86,26 @@ int symfile_load(const char *fname)
 	header = p;
 	p += sizeof(*header);
 	if (header == NULL) {
-		say_error("can't mmap `%s': %m", fname);
+		LH_ERROR("can't mmap `%s': %m", fname);
 
 		return -1;
 	}
 
 	if (header->magic != MAGIC) {
-		say_error("bad magic 0x%x from `%s'", header->magic, fname);
+		LH_ERROR("bad magic 0x%x from `%s'", header->magic, fname);
 
 		return -1;
 	}
 
 	if ((header->size + sizeof(*header)) != (uint32_t)st_buf.st_size) {
-		say_error("bad file `%s' size: %su, expected size: %lu",
+		LH_ERROR("bad file `%s' size: %su, expected size: %lu",
 			  fname, st_buf.st_size, header->size + sizeof(*header));
 
 		return -1;
 	}
 
 	if ((header->tail_size + sizeof(struct sym_entry) * header->n_symbols) != header->size) {
-		say_error("file `%s' is broken", fname);
+		LH_ERROR("file `%s' is broken", fname);
 
 		return -1;
 	}
@@ -121,7 +117,7 @@ int symfile_load(const char *fname)
 	has_hash = p;
 	p += sizeof(*has_hash);
 	if (*has_hash != 2 && *has_hash != 0) {
-		say_error("unsupported file `%s' format", fname);
+		LH_ERROR("unsupported file `%s' format", fname);
 
 		return -1;
 	}
@@ -134,8 +130,7 @@ int symfile_load(const char *fname)
 	has_dwarf = p;
 	p += sizeof(*has_dwarf);
 	if (*has_dwarf > 1) {
-		say_error("unsupported file `%s' format", fname);
-
+		LH_ERROR("unsupported file `%s' format", fname);
 		return -1;
 	}
 
@@ -152,7 +147,7 @@ int symfile_load(const char *fname)
 
 	sym_table.sym_name = p;
 
-	say_info("`%s' has been successfully loaded", fname);
+	LH_PRINT("`%s' has been successfully loaded", fname);
 
 	return 0;
 }

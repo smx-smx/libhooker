@@ -3,8 +3,8 @@
  *
  */
 
-#ifndef __HOOKER_H
-#    define __HOOKER_H
+#ifndef __LH_COMMON_H
+#    define __LH_COMMON_H
 
 #    if __x86_64__
 #    elif __i386__
@@ -34,8 +34,8 @@ char *readlink_safe(char *path);
 #    define LH_PRINT(...) lh_print(0,1, WHEREARG, __VA_ARGS__)
 #    define LH_VERBOSE(N,...) lh_print(N,1, WHEREARG, __VA_ARGS__)
 #    define LH_VERBOSE_NN(N,...) lh_print(N,0, WHEREARG, __VA_ARGS__)
-#    define LH_ERROR_SE(...) lh_print(0, 1, WHEREARG, "ERROR: %s (%s)", __VA_ARGS__, strerror(errno))
-#    define LH_ERROR(...) lh_print(0, 1, WHEREARG, "ERROR: %s", __VA_ARGS__)
+#    define LH_ERROR_SE(fmt, ...) lh_print(0, 1, WHEREARG, "ERROR: "fmt" (%s)", ## __VA_ARGS__, strerror(errno))
+#    define LH_ERROR(...) lh_print(0, 1, WHEREARG, "ERROR: " __VA_ARGS__)
 
 #    if __WORDSIZE == 64
 #        define LX "%lx"

@@ -109,7 +109,6 @@ int runProc(void *arg){
 
 int main(int argc, char *argv[]) {
 	int re = LH_SUCCESS;
-
 	do {
 		if (LH_SUCCESS != (re = parse_opts(argc, argv)))
 			break;
