@@ -86,20 +86,6 @@ function premake_parser(){
 }
 
 make_fatal=0
-function stderr_parser(){
-	while read line; do
-		text="$(rmcolor "$line")"
-		case "$line" in
-			'')
-				;;
-			*)
-				make_fatal=1
-				echo "bad $line"
-				;;
-		esac
-	done
-}
-
 function make_parser(){
 	in_prj=0
 	while read line; do
