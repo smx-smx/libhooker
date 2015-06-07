@@ -4,16 +4,17 @@
  */
 
 #ifndef __HOOKER_NEEDLE_H
-#    define __HOOKER_NEEDLE_H
+#define __HOOKER_NEEDLE_H
 
-#    include <stdint.h>
-#    include <sys/ptrace.h>
-#    include <unistd.h>
+#include <stdint.h>
+#include <sys/ptrace.h>
+#include <unistd.h>
 
-#    include "lh_common.h"
-#    include "interface/os/inject_linux.h" //temporary. needs a unified lh_session_t
+#include "lh_common.h"
+#include "interface/if_cpu.h"
+#include "interface/os/inject_linux.h" //temporary. needs a unified lh_session_t
 
-#    define LH_LIB_MAX 128
+#define LH_LIB_MAX 128
 
 typedef struct {
 	lh_r_process_t proc;

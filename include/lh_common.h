@@ -45,16 +45,6 @@ char *readlink_safe(char *path);
 #        define LU "%u"
 #    endif
 
-#    ifdef __android__
-
-struct user {
-	long uregs[18];
-};
-
-#    else
-#        include <sys/user.h>
-#    endif
-
 /*
  * Any info you want to pass to the hooked process
  */

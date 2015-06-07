@@ -160,7 +160,7 @@ int inj_pass_args2func(pid_t pid, struct user *iregs, uintptr_t fn, uintptr_t ar
 	LH_VERBOSE(3, "copying Arg 1 to r0.");
 	iregs->regs.uregs[0] = arg1;
 
-	LH_VERBOSE(3, "opying Arg 2 to r1.");
+	LH_VERBOSE(3, "copying Arg 2 to r1.");
 	iregs->regs.uregs[1] = arg2;
 	lh_rset_ip(iregs, fn);
 

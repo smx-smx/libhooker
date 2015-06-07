@@ -9,6 +9,14 @@
 #include <sys/wait.h>
 #include <errno.h>
 
+#ifdef __android__
+struct user {
+	long uregs[18];
+};
+#else
+#include <sys/user.h>
+#endif
+
 #include "needle.h"
 //#include "inject.h"
 
