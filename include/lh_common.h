@@ -16,9 +16,12 @@
 #    include <stdint.h>
 #    include <stdbool.h>
 #    include <unistd.h>
+#    include "interface/if_os.h"
 #    include <string.h>
 #    include <sys/stat.h>
+#ifdef __linux__
 #    include <linux/limits.h>
+#endif
 #    include <errno.h>
 
 #    define LH_SUCCESS 0
@@ -48,7 +51,7 @@ char *readlink_safe(char *path);
 /*
  * Any info you want to pass to the hooked process
  */
-typedef struct __attribute__((packed)) {
+PACK(typedef struct {
 	char magic[4];
 
 	int argc;
@@ -60,6 +63,6 @@ typedef struct __attribute__((packed)) {
 	int lh_verbose;
 	pid_t pid;
 	char *exename;
-} lh_r_process_t;
+}) lh_r_process_t;
 
 #endif

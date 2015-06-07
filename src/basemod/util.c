@@ -27,7 +27,11 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <util.h>
+#ifndef __linux__
+#include <stdlib.h>
+const char *addr2sym(uintptr_t addr){ return NULL; }
+void *sym2addr(const char *name){ return NULL; }
+#else
 
 #include <symfile.h>
 
@@ -61,74 +65,4 @@ const char *addr2sym(uintptr_t addr)
 	return name;
 }
 
-#if 0
-/* 
- * Backtrace: getting the call stack without a frame pointer:
- *  http://www.yosefk.com/blog/getting-the-call-stack-without-a-frame-pointer.html
- */
-
-/* get previous stack pointer and return address given the current ones */
-static int get_prev_sp_ra(void** prev_sp, void** prev_ra, void* sp, void* ra)
-{
-	unsigned* wra = (unsigned*)ra;
-	int spofft;
-
-	/* scan towards the beginning of the function -
-	   addui sp,sp,spofft should be the first command */
-	while((*wra >> 16) != 0x27bd) {
-		/* test for "scanned too much" elided */
-		wra--;
-	}
-	spofft = ((int)*wra << 16) >> 16; /* sign-extend */
-	*prev_sp = (char*)sp - spofft;
-
-	/* now scan forward for sw r31,raofft(sp) */
-	while(wra < (unsigned*)ra) {
-		if((*wra >> 16) == 0xafbf) {
-			int raofft = ((int)*wra << 16) >> 16; /* sign */
-			*prev_ra = *(void**)((char*)sp + raofft);
-
-			return 1;
-		}
-		wra++;
-	}
-
-	return 0; /* failed to find where ra is saved */
-}
-
-const char *backtrace(void)
-{
-	static char buf[4096];
-	char *p = NULL;
-	void* sp; /* stack pointer register */
-	void* ra; /* return address register */
-	/* adjust sp by the offset by which this function has just decremented it */
-	int* funcbase = (int*)(int)&backtrace;
-	/* funcbase points to an addiu sp,sp,spofft command */
-	int spofft = (*(funcbase + 3) << 16) >> 16; /* 16 LSBs */
-
-	/* read sp and ra registers */
-	__asm__("move %0, $29"
-		:"=r"(sp)
-		:
-	);
-	__asm__("move %0, $31"
-		:"=r"(ra)
-		:
-	);
-
-	sp = (char*)sp - spofft;
-	buf[0] = '\0';
-	p = buf;
-	do {
-		const char *name = addr2sym(ra);
-
-		if (name != NULL)
-			p += snprintf(p, sizeof(buf) - (p - buf), "\n%s", name);
-		else
-			p += snprintf(p, sizeof(buf) - (p - buf), "\n%p", ra);
-	} while(get_prev_sp_ra(&sp, &ra, sp, ra));
-
-	return buf; /* backtrace */
-}
 #endif

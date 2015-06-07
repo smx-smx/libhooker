@@ -31,7 +31,7 @@
 
 #include <stdint.h>
 #include <unistd.h>
-
+#include "interface/if_os.h"
 
 struct sym_entry {
 	uint32_t addr;

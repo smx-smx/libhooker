@@ -10,6 +10,7 @@
 #    include <fcntl.h>
 #    include <elf.h>
 #    include <stdbool.h>
+#    include <sys/ptrace.h>
 #    include "lh_common.h"
 
 enum {

@@ -30,24 +30,26 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 
+#include "interface/if_os.h"
 #include "lh_common.h"
 #include "symfile.h"
 
 #define MAGIC 0xB12791EE
 
 
-struct symfile_header {
+PACK(struct symfile_header {
 	uint32_t magic;
 	uint32_t unknown;
 	uint32_t size;
 	uint32_t n_symbols;
 	uint32_t tail_size;
-} __attribute__((packed));
+});
 
 
 struct sym_table sym_table = {
@@ -65,7 +67,7 @@ int symfile_load(const char *fname)
 {
 	int fd = -1;
 	struct stat st_buf;
-	void *p;
+	uint8_t *p;
 	struct symfile_header *header;
 	uint32_t *has_hash, *has_dwarf;
 	uint32_t dwarf_data_size = 0;
@@ -83,7 +85,7 @@ int symfile_load(const char *fname)
 	}
 
 	p = mmap(NULL, st_buf.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-	header = p;
+	header = (void *)p;
 	p += sizeof(*header);
 	if (header == NULL) {
 		LH_ERROR("can't mmap `%s': %m", fname);
@@ -111,10 +113,10 @@ int symfile_load(const char *fname)
 	}
 
 	sym_table.n_symbols = header->n_symbols;
-	sym_table.sym_entry = p;
+	sym_table.sym_entry = (void *)p;
 	p += sizeof(sym_table.sym_entry[0]) * sym_table.n_symbols;
 
-	has_hash = p;
+	has_hash = (void *)p;
 	p += sizeof(*has_hash);
 	if (*has_hash != 2 && *has_hash != 0) {
 		LH_ERROR("unsupported file `%s' format", fname);
@@ -123,11 +125,11 @@ int symfile_load(const char *fname)
 	}
 
 	if (*has_hash == 2) {
-		sym_table.hash = p;
+		sym_table.hash = (void *)p;
 		p += sizeof(sym_table.hash[0]) * ((sym_table.n_symbols + 1) & (~0 - 1));
 	}
 
-	has_dwarf = p;
+	has_dwarf = (void *)p;
 	p += sizeof(*has_dwarf);
 	if (*has_dwarf > 1) {
 		LH_ERROR("unsupported file `%s' format", fname);
@@ -139,13 +141,13 @@ int symfile_load(const char *fname)
 		p += sizeof(sym_table.n_dwarf_lst);
 		dwarf_data_size = *(uint32_t *)p;
 		p += sizeof(dwarf_data_size);
-		sym_table.dwarf_lst = p;
+		sym_table.dwarf_lst = (void *)p;
 		p += sizeof(sym_table.dwarf_lst[0]) * sym_table.n_dwarf_lst;
 		sym_table.dwarf_data = p;
 		p += dwarf_data_size;
 	}
 
-	sym_table.sym_name = p;
+	sym_table.sym_name = (void *)p;
 
 	LH_PRINT("`%s' has been successfully loaded", fname);
 

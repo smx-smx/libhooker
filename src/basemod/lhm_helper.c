@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include "interface/if_os.h"
 
 #include "lh_common.h"
 #include "lh_module.h"

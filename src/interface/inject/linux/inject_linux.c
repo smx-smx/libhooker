@@ -12,7 +12,7 @@
 
 #include "needle.h"
 #include "lh_module.h"
-#include "interface/os/inject_linux.h"
+#include "interface/inject/inject_linux.h"
 #include "interface/if_cpu.h"
 
 #define MMAP_SIZE 0x1000 //4096 bytes

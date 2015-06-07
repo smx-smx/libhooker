@@ -5,10 +5,13 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <ctype.h>
+
+#ifdef __linux__
 #include <sched.h>
 #include <sys/resource.h>
+#endif
 
-#include "util.h"
+#include "interface/if_os.h"
 #include "needle.h"
 
 #define APP_NAME "needle"

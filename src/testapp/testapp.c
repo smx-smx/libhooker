@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include <stdlib.h>
+#include <unistd.h>
 
+#include "interface/if_os.h"
 #include "lh_common.h"
 
 void otherfunction(int a, char *s) {

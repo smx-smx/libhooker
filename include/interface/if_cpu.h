@@ -4,21 +4,22 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <stdint.h>
+#ifdef __linux__
 #include <sys/wait.h>
+#endif
 #include <errno.h>
 
-#ifdef __android__
+#if __android__
 struct user {
 	long uregs[18];
 };
-#else
+#elif __linux__
 #include <sys/user.h>
 #endif
 
+#include "lh_common.h"
 #include "needle.h"
-//#include "inject.h"
 
 #if defined(__i386__) || defined(__x86_64__)
 #include "interface/cpu/cpu_intel.h"
