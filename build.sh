@@ -201,6 +201,7 @@ case "$1" in
 		exit 1
 		;;
 	clean)
+		gen_cmd="clean"
 		build_cmd="${build_cmd} clean"
 		;;
 	'')

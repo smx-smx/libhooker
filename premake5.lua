@@ -1,5 +1,5 @@
 solution "libhooker"
-	configurations { "x86_64", "i386","arm" }
+	configurations { "x86_64", "i386", "arm" }
 	
 	flags { "Symbols" }
 
@@ -8,6 +8,8 @@ solution "libhooker"
 	language "C"
 	includedirs { "include" }
 	
+	files { "src/common/*.c" }
+	
 	targetdir "bin"
 	targetprefix("")
 	
@@ -15,7 +17,6 @@ solution "libhooker"
 	cross_prefix = os.getenv("CROSS_COMPILE")
 	
 	if cross_prefix then
-
 		local cross_gcc                 = premake.tools.cross_gcc
 		local gcc                     = premake.tools.gcc
 
@@ -44,6 +45,9 @@ solution "libhooker"
 			end
 			return name
 		end
+		
+		filter "configurations:arm"
+			toolset "cross_gcc"
 	end
 
 	filter "configurations:i386"
@@ -54,17 +58,12 @@ solution "libhooker"
 		architecture "x86_64"
 		links { "capstone" }
 	
-	filter "configurations:arm"
-		toolset "cross_gcc"
-	
 	filter "platforms:linux"
 		system "linux"
 		defines { "_GNU_SOURCE" }
 		buildoptions {
 			"-fPIC", "-Wall"
 		}
-
-	files { "src/common/*.c" }
 
 	project "needle"
 		kind "ConsoleApp"
@@ -89,7 +88,7 @@ solution "libhooker"
 
 		filter "platforms:linux"
 			files {
-				"src/interface/os/linux/*.c",
+				"src/interface/inject/linux/*.c",
 				"src/interface/exe/elf/*.c"
 			}
 		
