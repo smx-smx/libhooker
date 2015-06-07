@@ -22,9 +22,16 @@ export white='printf \033[01;37m'
 function negate(){
 	echo -ne $(($1^1))
 }
+
 function cmd_exists(){
 	type -p "$1" &>/dev/null
-	negate $?
+	if [ `negate $?` -eq 0 ]; then
+		if [ -e "$1" ] && [ ! -d "$1" ]; then
+			echo -ne 1;
+		else
+			echo -ne 0;
+		fi
+	fi
 }
 
 function verbose_dry(){
@@ -127,6 +134,7 @@ function make_parser(){
 	done
 }
 
+#### MAIN ####
 if ! cmd_exists "premake5" > /dev/null; then
 	err_exit "premake5 missing, cannot continue"
 fi
@@ -155,14 +163,52 @@ if [ -z "$CROSS_COMPILE" ]; then
 fi
 
 if [ -z "$CC" ]; then
-	CC="gcc"
+	CC="${CROSS_COMPILE}gcc"
+fi
+if [ -z "$CXX" ]; then
+	CXX="${CROSS_COMPILE}g++"
+fi
+if [ -z "$AR" ]; then
+	AR="${CROSS_COMPILE}ar"
+fi
+if [ -z "$RANLIB" ]; then
+	RANLIB="${CROSS_COMPILE}ranlib"
+fi
+if [ -z "$LD" ]; then
+	LD="${CROSS_COMPILE}ld"
+fi
+if [ -z "$OBJDUMP" ]; then
+	OBJDUMP="${CROSS_COMPILE}objdump"
+fi
+if [ -z "$READELF" ]; then
+	READELF="${CROSS_COMPILE}readelf"
 fi
 
-if ! cmd_exists "${CROSS_COMPILE}${CC}" > /dev/null; then
-	err_exit "The specified cross compiler doesn't exist"
+if ! cmd_exists ${CC} || ! cmd_exists ${AR} || ! cmd_exists ${LD} || ! cmd_exists ${RANLIB}; then
+		err_exit "The compiler '${CC}' doesn't exist, or the toolchain is broken"
 fi
 
-MACH="$(${CROSS_COMPILE}${CC} -dumpmachine)"
+MACH="$(${CC} -dumpmachine)"
+
+case "$1" in
+	help)
+		$white
+		echo -e "Usage:"
+		echo -e "To compile           $0"
+		echo -e "To cross compile     CROSS_COMPILE=toolchain-prefix- $0"
+		echo -e "To clean:            $0 clean"
+		$normal
+		exit 1
+		;;
+	clean)
+		build_cmd="${build_cmd} clean"
+		;;
+	'')
+		;;
+	*)
+		warn "Unrecognized command '${1}'"
+		;;
+esac
 
 case $MACH in 
 	x86_64*)
@@ -182,31 +228,29 @@ case $MACH in
 		;;
 esac
 
-case "$1" in
-	clean)
-		build_cmd="${build_cmd} clean"
-		if [ -d "obj" ]; then
-			rm -r "obj";
-		fi
-		if [ -d "bin" ] && [ $(ls -1a bin | wc -l) -gt 2 ]; then
-			rm -r bin/*
-		fi
-		;;
-	'')
-		;;
-	*)
-		warn "Unrecognized command '${1}'"
-		;;
-esac
-
 progress "Generating build files..."
-verbose "premake5 $gen_cmd" | premake_parser
-if [ ! $? -eq 0 ]; then
+CROSS_COMPILE=$CROSS_COMPILE verbose "premake5 $gen_cmd" | premake_parser
+if [ ! ${PIPESTATUS[0]} -eq 0 ]; then
 	err_exit "premake5 failed!"
 fi
 progress "Running build command"
-verbose "$build_cmd conf=${CONF_ARCH}_${CONF_OS}" | make_parser
-if [ ! $? -eq 0 ]; then
+verbose "$build_cmd config=${CONF_ARCH}_${CONF_OS}" | make_parser
+if [ ! ${PIPESTATUS[0]} -eq 0 ]; then
 	err_exit "build failed!"
 fi
+
+case "$1" in
+	clean)
+		$yellow; echo "Cleaning up..."; $normal
+		if [ -d "obj" ]; then
+			rm -r "obj";
+			if [ $(ls -1 *.make 2>/dev/null | wc -l) -gt 0 ]; then
+				rm *.make
+			fi
+		fi
+		if [ -d "bin" ] && [ $(ls -1 bin/ 2>/dev/null | wc -l) -gt 0 ]; then
+			rm -r bin/*
+		fi
+	;;
+esac
 ok "All Done!"
