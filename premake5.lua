@@ -11,9 +11,10 @@ solution "libhooker"
 	targetdir "bin"
 	targetprefix("")
 	
+	premake.tools.cross_gcc         = {}
 	cross_prefix = os.getenv("CROSS_COMPILE")
+	
 	if cross_prefix then
-		premake.tools.cross_gcc         = {}
 
 		local cross_gcc                 = premake.tools.cross_gcc
 		local gcc                     = premake.tools.gcc
