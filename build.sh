@@ -135,6 +135,8 @@ function make_parser(){
 }
 
 #### MAIN ####
+cd $(dirname $0)
+
 if ! cmd_exists "premake5" > /dev/null; then
 	err_exit "premake5 missing, cannot continue"
 fi
