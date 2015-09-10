@@ -1,3 +1,4 @@
+#include "interface/if_inject.h"
 #include "interface/if_cpu.h"
 #include "interface/cpu/cpu_intel.h"
 
@@ -11,7 +12,10 @@ inline int inj_reljmp_opcode_bytes() {
 }
 
 inline int inj_absjmp_opcode_bytes() {
-	return 5 + 8 + 1;
+	return
+		5 + //push
+		8 + //mov
+		1; //ret
 }
 
 int inj_build_rel_jump(uint8_t *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address) {

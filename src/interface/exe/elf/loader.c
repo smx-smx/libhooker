@@ -44,14 +44,14 @@ enum {
 };
 
 enum {
-	PROCMAPS_FILETYPE_UNKNOWN,
-	PROCMAPS_FILETYPE_EXE,
-	PROCMAPS_FILETYPE_LIB,
-	PROCMAPS_FILETYPE_DATA,
-	PROCMAPS_FILETYPE_VDSO,
-	PROCMAPS_FILETYPE_HEAP,
-	PROCMAPS_FILETYPE_STACK,
-	PROCMAPS_FILETYPE_SYSCALL
+	PROCMAPS_FILETYPE_UNKNOWN, //0
+	PROCMAPS_FILETYPE_EXE, //1
+	PROCMAPS_FILETYPE_LIB, //2
+	PROCMAPS_FILETYPE_DATA, //3
+	PROCMAPS_FILETYPE_VDSO, //4
+	PROCMAPS_FILETYPE_HEAP, //5
+	PROCMAPS_FILETYPE_STACK, //6
+	PROCMAPS_FILETYPE_SYSCALL //7
 };
 
 void ld_procmaps_dump(struct ld_procmaps *pm) {
@@ -332,7 +332,10 @@ int ld_find_library(struct ld_procmaps *maps, const size_t mapnum, const char *l
 					/* we're looking for a non-library or a non-exe file or a
 					 * non-data file
 					 */
-					if (pm->filetype == PROCMAPS_FILETYPE_VDSO || pm->filetype == PROCMAPS_FILETYPE_HEAP || pm->filetype == PROCMAPS_FILETYPE_STACK || pm->filetype == PROCMAPS_FILETYPE_SYSCALL) {
+					if (pm->filetype == PROCMAPS_FILETYPE_VDSO ||
+						pm->filetype == PROCMAPS_FILETYPE_HEAP ||
+						pm->filetype == PROCMAPS_FILETYPE_STACK ||
+						pm->filetype == PROCMAPS_FILETYPE_SYSCALL) {
 						/* doing a substring match to be safe */
 						found = strstr(pm->pathname, libpath) != NULL ? true : false;
 					}
@@ -378,34 +381,47 @@ int ld_find_library(struct ld_procmaps *maps, const size_t mapnum, const char *l
 	return 0;
 }
 
+uintptr_t ld_symbols_get_addr(const struct elf_symbol *syms, size_t syms_num, uintptr_t addr_begin,
+								const char *symbol, size_t *size)
+{
+	size_t idx = 0;
+	uintptr_t ptr = 0;
+	for (idx = 0; idx < syms_num; ++idx) {
+		if (strcmp(symbol, syms[idx].name) == 0) {
+			LH_VERBOSE(2, "Found %s in symbol list at " "" LU " with address offset " LX, symbol, idx, syms[idx].address);
+			if (size != NULL)
+				*size = syms[idx].size;
+			if (syms[idx].address > addr_begin)
+				ptr = syms[idx].address;
+			else
+				ptr = syms[idx].address + addr_begin;
+			break;
+		}
+	}
+	return ptr;
+}
+
+void ld_free_symbols(struct elf_symbol *syms, size_t syms_num){
+	/* free memory for all to avoid mem-leaks */
+	size_t idx;
+	for (idx = 0; idx < syms_num; ++idx) {
+		if (syms[idx].name)
+			free(syms[idx].name);
+		syms[idx].name = NULL;
+	}
+	free(syms);
+}
+
 uintptr_t ld_find_address(const struct ld_procmaps * lib, const char *symbol, size_t * size) {
 	uintptr_t ptr = 0;
 	if (lib && symbol && lib->pathname) {
 		size_t syms_num = 0;
 		struct elf_symbol *syms = exe_load_symbols(lib->pathname, &syms_num, NULL, NULL, NULL);
 		if (syms && syms_num > 0) {
-			size_t idx = 0;
 			LH_VERBOSE(1, LU " symbols found in %s", syms_num, lib->pathname);
 			qsort(syms, syms_num, sizeof(*syms), elf_symbol_cmpqsort);
-			for (idx = 0; idx < syms_num; ++idx) {
-				if (strcmp(symbol, syms[idx].name) == 0) {
-					LH_VERBOSE(2, "Found %s in symbol list at " "" LU " with address offset " LX, symbol, idx, syms[idx].address);
-					if (size != NULL)
-						*size = syms[idx].size;
-					if (syms[idx].address > lib->addr_begin)
-						ptr = syms[idx].address;
-					else
-						ptr = syms[idx].address + lib->addr_begin;
-					break;
-				}
-			}
-			/* free memory for all to avoid mem-leaks */
-			for (idx = 0; idx < syms_num; ++idx) {
-				if (syms[idx].name)
-					free(syms[idx].name);
-				syms[idx].name = NULL;
-			}
-			free(syms);
+			ptr = ld_symbols_get_addr(syms, syms_num, lib->addr_begin, symbol, size);
+			ld_free_symbols(syms, syms_num);
 			syms_num = 0;
 		} else {
 			LH_VERBOSE(1, "No symbols found in %s", lib->pathname);

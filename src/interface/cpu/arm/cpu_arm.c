@@ -5,6 +5,21 @@ inline int inj_opcode_bytes(){
 	return 4;
 }
 
+/*
+inline int inj_trap_bytes(){
+	return 4;
+}
+
+int inj_build_trap(uint8_t *buffer){
+#ifndef __ARM_EABI__
+	memcpy(buffer, 0xef9f0001, inj_trap_bytes());
+#else
+	memcpy(buffer, 0xe7f001f0, inj_trap_bytes());
+#endif
+	return LH_SUCCESS;
+}
+*/
+
 int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes){
 	return sz / inj_opcode_bytes();
 }

@@ -1,5 +1,14 @@
 #include "interface/cpu/cpu_intel.h"
 
+inline int inj_trap_bytes(){
+	return 1;
+}
+
+int inj_build_trap(uint8_t *buffer){
+	buffer[0] = 0xCC; //int 3
+	return LH_SUCCESS;
+}
+
 int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes){
 	csh handle;
 	cs_insn *insn;
@@ -23,6 +32,7 @@ int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes){
 	for(i=0; i<count; i++){
 		*validbytes += insn[i].size;
 	}
+	
 	ret:
 		cs_free(insn, count);
 		return count;

@@ -52,7 +52,7 @@ char *readlink_safe(char *path);
  * Any info you want to pass to the hooked process
  */
 PACK(typedef struct {
-	char magic[4];
+	char magic[4]; //LHFO
 
 	int argc;
 	char **argv;
@@ -62,6 +62,7 @@ PACK(typedef struct {
 
 	int lh_verbose;
 	pid_t pid;
+
 	char *exename;
 }) lh_r_process_t;
 

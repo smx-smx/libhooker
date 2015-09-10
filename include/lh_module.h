@@ -6,7 +6,7 @@
 #ifndef __LH_MODULE_H
 #define __LH_MODULE_H
 
-#include "needle.h"
+#include "interface/inject/inject_linux.h"
 #include "lh_mod_common.h"
 #include "lh_common.h"
 
@@ -18,7 +18,8 @@
 enum {
 	LHM_FN_HOOK_TRAILING = 0,
 	LHM_FN_HOOK_BY_NAME,
-	LHM_FN_HOOK_BY_OFFSET
+	LHM_FN_HOOK_BY_OFFSET,
+	LHM_FN_HOOK_BY_AOBSCAN
 };
 
 /*
@@ -33,6 +34,8 @@ typedef struct {
 	uintptr_t hook_fn;
 	uintptr_t orig_function_ptr;
 	size_t opcode_bytes_to_restore;
+	size_t aob_size;
+	char *aob_pattern;
 } lh_fn_hook_t;
 
 

@@ -8,11 +8,11 @@
 
 #ifdef __linux__
 #include <sched.h>
+#include <signal.h>
 #include <sys/resource.h>
 #endif
 
-#include "interface/if_os.h"
-#include "needle.h"
+#include "interface/inject/inject_linux.h"
 
 #define APP_NAME "needle"
 int g_optind_lib = 0, g_optind_exe = 0;
@@ -101,17 +101,42 @@ int parse_opts(int argc, char *argv[]) {
 }
 
 int runProc(void *arg){
-	char **argv = *((char ***)arg);
+	char **argv = (char **)arg;
+	#if 0
+
 	if(g_uid > -1)
 		setresuid(g_uid, g_uid, g_uid);
 	if(g_gid > -1)
 		setresgid(g_gid, g_gid, g_gid);
 
-	return execv(argv[0], argv);
+	if(access(LH_PRELOAD_SO, F_OK) < 0){
+		LH_ERROR("ERROR: %s missing, cannot continue!", LH_PRELOAD_SO);
+	}
+
+	//constant pointer to char array
+	char * const envp[] = {
+		"LD_PRELOAD=./"LH_PRELOAD_SO,
+		NULL
+	};
+
+	int ret = execve(argv[0], argv, envp);
+	
+	#else
+
+	int ret = execv(argv[0], argv);
+	if(ret < 0){
+		LH_ERROR_SE("execv");
+		return ret;
+	}
+
+	#endif
+	return ret;
 }
 
 int main(int argc, char *argv[]) {
 	int re = LH_SUCCESS;
+
+	char **prog_argv = NULL;
 	do {
 		if (LH_SUCCESS != (re = parse_opts(argc, argv)))
 			break;
@@ -128,7 +153,6 @@ int main(int argc, char *argv[]) {
 				print_usage_and_quit("Missing pid or path to executable to run!");
 				return EXIT_FAILURE;
 			} else {
-				char **exec_args = NULL;
 				char *args = strdup(argv[g_optind_exe]);
 				char *tok = strtok(args, " ");
 				int ntok = 0;
@@ -138,14 +162,16 @@ int main(int argc, char *argv[]) {
 				}
 
 				while(tok){
-					if(!exec_args)
-						exec_args = calloc(sizeof(char *), ntok + 1);
+					if(!prog_argv)
+						prog_argv = calloc(sizeof(char *), ntok + 1);
 					else
-						exec_args = realloc(exec_args, sizeof(char *) * (ntok + 1));
-					exec_args[ntok++] = strdup(tok);
+						prog_argv = realloc(prog_argv, sizeof(char *) * (ntok + 1));
+					prog_argv[ntok++] = strdup(tok);
 	
 					tok = strtok(NULL, " ");
 				}
+				session->proc.prog_argc = ntok;
+				session->proc.prog_argv = prog_argv;
 
 				if(!args){
 					LH_ERROR_SE("strdup");
@@ -158,6 +184,9 @@ int main(int argc, char *argv[]) {
 					LH_ERROR_SE("getrlimit");
 					return EXIT_FAILURE;
 				}
+
+				LH_VERBOSE(3, "Stack size: 0x%lx", rl.rlim_cur);
+
 				void *stack_end = calloc(1, rl.rlim_cur);
 				if(!stack_end){
 					LH_ERROR_SE("malloc");
@@ -167,13 +196,24 @@ int main(int argc, char *argv[]) {
 				void *stack_start = (void *)((uintptr_t)stack_end + rl.rlim_cur); //stack grows downwards
 
 				LH_PRINT("Launching executable '%s'", argv[g_optind_exe]);
-				if((g_pid = clone(runProc, stack_start, CLONE_VFORK | CLONE_VM, &exec_args)) < 0){
+				if((g_pid = clone(runProc, stack_start, CLONE_VFORK, prog_argv)) < 0){
 					LH_ERROR_SE("clone");
 					free(stack_end);
 					return EXIT_FAILURE;
 				}
+				LH_PRINT("Process launched! PID: %d", g_pid);
+
+				session->proc.exename = strdup(prog_argv[0]);
+				session->started_by_needle = true;
 			}
 		}
+		
+		/*while(1){
+			LH_PRINT("Waiting for %d ...", g_pid);
+			if(kill(g_pid, 0) < 0)
+				continue;
+			break;
+		}*/
 
 		//start tracking the pid specified by the user
 		if (LH_SUCCESS != (re = lh_attach(session, g_pid)))
@@ -186,7 +226,6 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 		LH_PRINT("Running on TTY: %s", cur_tty);
-
 		char *libpath = realpath(argv[g_optind_lib], NULL);
 		if(!libpath){
 			LH_ERROR_SE("realpath");
@@ -217,53 +256,61 @@ int main(int argc, char *argv[]) {
 		session->proc.argv = mod_argv;
 
 
-		//crate and prepare memory for hooked program arguments
-		char *cmdline;
-		char **prog_argv = NULL;
-		argp = 0;
-		do {
-			FILE *pargs;
-			asprintf(&cmdline, "/proc/%d/cmdline", g_pid);
-			pargs = fopen(cmdline, "r");
-			if(!pargs){
-				LH_ERROR("Cannot open '%s' for reading, ignoring program args...", cmdline);
-				break;
-			}
-			free(cmdline);
-
-			char ch;
-			int argSz = 0;
-			char *arg;
-			while(1){
-				if((ch=fgetc(pargs)) == EOF){
+		if(!session->started_by_needle){
+			//crate and prepare memory for hooked program arguments
+			char *cmdline;
+			
+			argp = 0;
+			do {
+				FILE *pargs;
+				asprintf(&cmdline, "/proc/%d/cmdline", g_pid);
+				pargs = fopen(cmdline, "r");
+				if(!pargs){
+					LH_ERROR("Cannot open '%s' for reading, ignoring program args...", cmdline);
 					break;
 				}
-				argSz++;
-				if(ch == 0x00){
-					fseek(pargs, -argSz, SEEK_CUR);
-					arg = calloc(1, argSz);
-					fread(arg, argSz, 1, pargs);
-					argSz = 0;
-					if(!prog_argv){
-						//initialize argument vector
-						prog_argv = calloc(sizeof(char *), argp + 1);
-					} else {
-						//add a new argument to argument vector
-						char **tmp = realloc(prog_argv, sizeof(char *) * (argp + 1)); //add a new char *
-						if(!tmp){
-							LH_ERROR_SE("realloc");
+				free(cmdline);
+
+				char ch;
+				char *arg;
+				while(1){
+					if((ch=fgetc(pargs)) == EOF || feof(pargs)){
+						break;
+					}
+					if(ch == 0x00){
+						argp++;
+					}
+				}
+				rewind(pargs);
+				printf("Allocating %d args\n", argp);
+				char **prog_argv = calloc(1, sizeof(char *) * argp);
+
+				int argSz = 0;
+				int argc = 0;
+				while(1){
+					if((ch=fgetc(pargs)) == EOF || feof(pargs)){
+						break;
+					}
+					argSz++;
+					if(ch == 0x00){
+						if(argc > argp){
+							LH_ERROR("ERROR: Unexpected overflow of program arguments!");
 							break;
 						}
-						prog_argv = tmp;
-						prog_argv[argp + 1] = NULL;
+						fseek(pargs, -argSz, SEEK_CUR);
+						arg = calloc(1, argSz);
+						fread(arg, argSz, 1, pargs);
+						argSz = 0;
+						prog_argv[argc++] = arg;
 					}
-					prog_argv[argp++] = arg;
 				}
-			}
-			fclose(pargs);
-			session->proc.prog_argc = argp;
-			session->proc.prog_argv = prog_argv;
-		} while(0);
+
+
+				fclose(pargs);
+				session->proc.prog_argc = argp;
+				session->proc.prog_argv = prog_argv;
+			} while(0);
+		}
 
 		for(argp=0; argp<session->proc.prog_argc; argp++)
 			printf("ProgArg %d => %s\n", argp, session->proc.prog_argv[argp]);
@@ -289,21 +336,3 @@ int main(int argc, char *argv[]) {
 
 	return re;
 }
-
-/*
-unsigned char *s = malloc(10);  
-inj_build_rel_jump(s,  0xDAEB8, 0x2EA6); lh_hexdump("http://www.codepwn.com/posts/assembling-from-scratch-encoding-blx-instruction-in-arm-thumb/", s, 8);  
-inj_build_rel_jump(s, 0x14, 0x8); lh_hexdump("goforth", s, 8);  
-inj_build_rel_jump(s, 0x0, 0x1c); lh_hexdump("goback", s, 8);  
-return -1;
-
-char *s = malloc(10);  inj_build_rel_jump(s, 0x02980000, 0x6259326B); lh_hexdump("crap", s, 10);  return -1;
-unsigned char *s = malloc(10);  test_inj_build_rel_jump(s, 0xDAEB8, 0x2EA6); lh_hexdump("crap", s, 10);  return -1;
-
-  int x = -1;  lh_hexdump("-1: ", &x, 4);return 1;
-
-char *c = malloc(20);
-inj_build_abs_jump(c, 7, 0);
-hexDump ("REL", c, inj_absjmp_opcode_bytes());
-return 1;
-*/
