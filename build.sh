@@ -19,6 +19,25 @@ export lpurple='printf \033[01;35m'
 export lcyan='printf \033[01;36m'
 export white='printf \033[01;37m'
 
+#don't use jobs atm
+#MAKE_JOBS=$(grep processor /proc/cpuinfo | wc -l)
+MAKE_JOBS=1
+
+gen_cmd=""
+build_cmd=""
+color_cmd=""
+
+CONF_ARCH=""
+CONF_OS=""
+
+function _pushd(){
+	pushd "$@" >/dev/null 2>&1
+}
+
+function _popd(){
+	popd "$@" > /dev/null 2>&1
+}
+
 function negate(){
 	echo -ne $(($1^1))
 }
@@ -141,18 +160,11 @@ if ! cmd_exists "premake5" > /dev/null; then
 	err_exit "premake5 missing, cannot continue"
 fi
 
-gen_cmd=""
-build_cmd=""
-color_cmd=""
-
-CONF_ARCH=""
-CONF_OS=""
-
 case $OSTYPE in
 	linux-*)
 		ok "Linux detected"
 		gen_cmd="gmake"
-		build_cmd="make"
+		build_cmd="make -j${MAKE_JOBS}"
 		CONF_OS="linux"
 		;;
 	*)

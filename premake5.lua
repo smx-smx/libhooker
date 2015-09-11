@@ -1,5 +1,13 @@
 solution "libhooker"
-	configurations { "x86_64", "i386", "arm" }
+	configurations {
+		"x86_64", "i386",
+		"armv5", "armv7", "armthumb2", "arm64",
+		"ppc32", "ppc64",
+		"tilegx",
+		"mips32", "mips64",
+		"sparc32",
+		"auto"
+	}
 	
 	flags { "Symbols" }
 
@@ -13,50 +21,52 @@ solution "libhooker"
 	targetdir "bin"
 	targetprefix("")
 	
-	premake.tools.cross_gcc         = {}
-	cross_prefix = os.getenv("CROSS_COMPILE")
-	
-	if cross_prefix then
-		local cross_gcc                 = premake.tools.cross_gcc
-		local gcc                     = premake.tools.gcc
+	include("cross.lua")
+	toolset "cross_gcc"
 
-		cross_gcc.getcflags             = gcc.getcflags
-		cross_gcc.getcxxflags           = gcc.getcxxflags
-		cross_gcc.getforceincludes      = gcc.getforceincludes
-		cross_gcc.getldflags            = gcc.getldflags
-		cross_gcc.getcppflags           = gcc.getcppflags
-		cross_gcc.getdefines            = gcc.getdefines
-		cross_gcc.getundefines          = gcc.getundefines
-		cross_gcc.getincludedirs        = gcc.getincludedirs
-		cross_gcc.getLibraryDirectories = gcc.getLibraryDirectories
-		cross_gcc.getlinks              = gcc.getlinks
-		cross_gcc.getmakesettings       = gcc.getmakesettings
-
-		function cross_gcc.gettoolname (cfg, tool)  
-			local prefix = cross_prefix
-			if tool == "cc" then
-				name = prefix .. "gcc"  
-			elseif tool == "cxx" then
-				name = prefix .. "g++"
-			elseif tool == "ar" then
-				name = prefix .. "ar"
-			else
-				name = nil
-			end
-			return name
-		end
-		
-		filter "configurations:arm"
-			toolset "cross_gcc"
-	end
+	filter "configurations:auto"
+		defines { "SLJIT_CONFIG_AUTO" }
+		links { "capstone" }
 
 	filter "configurations:i386"
+		defines { "SLJIT_CONFIG_X86_32" }
 		architecture "x86"
 		links { "capstone" }
 	
 	filter "configurations:x86_64"
+		defines { "SLJIT_CONFIG_X86_64" }
 		architecture "x86_64"
 		links { "capstone" }
+
+	filter "configurations:armv5"
+		defines { "SLJIT_CONFIG_ARM_V5" }
+
+	filter "configurations:armv7"
+		defines { "SLJIT_CONFIG_ARM_V7" }
+
+	filter "configurations:armthumb2"
+		defines { "SLJIT_CONFIG_ARM_THUMB2" }
+
+	filter "configurations:arm64"
+		defines { "SLJIT_CONFIG_ARM_64" }
+
+	filter "configurations:ppc32"
+		defines { "SLJIT_CONFIG_PPC_32" }
+
+	filter "configurations:ppc64"
+		defines { "SLJIT_CONFIG_PPC_64" }
+
+	filter "configurations:mips32"
+		defines { "SLJIT_CONFIG_MIPS_32" }
+
+	filter "configurations:mips64"
+		defines { "SLJIT_CONFIG_MIPS_64" }
+
+	filter "configurations:sparc32"
+		defines { "SLJIT_CONFIG_SPARC_32" }
+
+	filter "configurations:tilegx"
+		defines { "SLJIT_CONFIG_TILEGX" }
 	
 	filter "platforms:linux"
 		system "linux"
@@ -71,6 +81,12 @@ solution "libhooker"
 			"src/needle/*.c"
 		}
 
+		includedirs { "include/sljit" }
+		
+		files {
+			"src/interface/cpu/sljit/sljitLir.c",
+		}
+
 		filter "configurations:i386"
 			files {
 				"src/interface/cpu/intel/common_intel.c",
@@ -83,8 +99,10 @@ solution "libhooker"
 				"src/interface/cpu/intel/cpu_x86_64.c",
 			}
 		
-		filter "configurations:arm"
-			files { "src/interface/cpu/arm/cpu_arm.c" }
+		filter "configurations:arm32"
+			files {
+				"src/interface/cpu/arm/cpu_arm.c"
+			}
 
 		filter "platforms:linux"
 			files {
