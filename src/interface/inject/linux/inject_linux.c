@@ -513,7 +513,7 @@ int inj_setexecwaitget(lh_session_t * lh, const char *fn, struct user *iregs) {
 	uintptr_t prev_sp = lh_rget_sp(iregs);
 	uintptr_t prev_fp = lh_rget_fp(iregs);
 	do {
-		LH_VERBOSE(2, "Setting registers and invoking %s.", fn);
+		LH_VERBOSE(3, "Setting registers and invoking %s.", fn);
 		if ((rc = inj_set_regs(lh->proc.pid, iregs)) != LH_SUCCESS)
 			break;
 		LH_VERBOSE(3, "Executing..");
@@ -609,8 +609,6 @@ uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function
 		function = lh_dlsym(lh, iregs, funcname);
 	}
 
-	LH_VERBOSE(2, "CALLING: %s(0x" LX ", 0x" LX ")", funcname, arg0, arg1);
-
 	if ((errno = inj_trap(lh->proc.pid, iregs)) != LH_SUCCESS){
 		return 0;
 	}
@@ -622,7 +620,7 @@ uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function
 		return 0;
 	// Return result
 	uintptr_t re = lh_rget_ax(iregs);
-	LH_VERBOSE(2, "RETURNED: " LX "\n", re);
+	LH_VERBOSE(2, "CALL: %s(0x" LX ", 0x" LX ") => "LX"", funcname, arg0, arg1, re);
 	return re;
 }
 
@@ -665,7 +663,6 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 
 		uintptr_t returned = lh_call_func(lh, iregs, lhm_mmap, "mmap", wanted_address, MMAP_SIZE);
 		if(errno) break;
-		LH_VERBOSE(2, "returned: " LX, returned);
 
 		// If the memory has been mapped at the wanted address
 		if (returned == wanted_address) {
@@ -967,17 +964,11 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 			LH_VERBOSE(4, "Function hooks: " LX " / " LX " (size " LX ")", (uintptr_t) fnh, hookend, (int)size);
 			// For every hook definition
 			while ((uintptr_t) fnh < hookend) {
-
-				hook_successful = 0;
-
 				if (fnh->hook_kind == LHM_FN_HOOK_TRAILING){
 					break;
 				}
-
-				if (!fnh->hook_fn) {
-					LH_PRINT("ERROR: hook_settings->fn_hooks[%d], hook_fn is null", fni);
-					break;
-				}
+				
+				hook_successful = 0;
 
 				LH_VERBOSE(1, "Function hook libname: '%s', symbol: '%s', offset: " LX, fnh->libname, fnh->symname, fnh->sym_offset);
 				LH_VERBOSE(3, "The replacement function: " LX, fnh->hook_fn);
@@ -1033,6 +1024,18 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					break;
 				}
 				LH_VERBOSE(2, "'%s' resolved to "LX, fnh->symname, symboladdr);
+
+
+				int do_hook = 1;
+				if (!fnh->hook_fn) {
+					LH_PRINT("WARNING: hook_settings->fn_hooks[%d], hook_fn is null", fni);
+					/* 
+					 * We accept null replacements, if user just wants to save the function address.
+					 * In that case, don't place the hook
+					 */
+					do_hook = 0;
+					goto after_hook;
+				}
 
 				// Get the number of bytes required to build an absolute jump
 				int abs_jump_size = inj_absjmp_opcode_bytes();
@@ -1191,14 +1194,6 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					goto error;
 				}
 
-				// We store the original function address, if wanted
-				if (fnh->orig_function_ptr != 0) {
-					if (LH_SUCCESS != inj_pokedata(lh->proc.pid, fnh->orig_function_ptr, r_addr_to_call_orig_fn)) {
-						LH_ERROR("Failed to copy original bytes");
-						goto error;
-					}
-				}
-
 				LH_VERBOSE(4, "REL/ABS JUMP CALCULATION: and now we overwrite the original function with our jump to the payload");
 
 				#ifdef LH_JUMP_ABS
@@ -1226,23 +1221,36 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				if (lh_verbose > 3) {
 					LH_VERBOSE(4, "Dumping the overwritten original function");
 					lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", symboladdr, 0x10);
-					if(errno) break;
+					if(errno)
+						break;
 
 					LH_VERBOSE(4, "Dumping the corresponding payload area");
 					lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", r_payload_start, hook_area);
-					if(errno) break;
+					if(errno)
+						break;
 				}
-
-				hook_successful = 1;
-				oneshot = false;
-
-				fni++;
-				fnh = &(hook_settings->fn_hooks[fni]);
-
+				
 				if(l_new_payload_start)
-					free(l_new_payload_start);
+						free(l_new_payload_start);
+						
+				after_hook:
+					// We store the original function address, if wanted
+					if (fnh->orig_function_ptr != 0) {
+						uintptr_t func_addr = (do_hook) ? r_addr_to_call_orig_fn : symboladdr;
+						if (LH_SUCCESS != inj_pokedata(lh->proc.pid, fnh->orig_function_ptr, func_addr)) {
+							LH_ERROR("Failed to copy original bytes");
+							goto error;
+						}
+					}
 
-				continue;
+					hook_successful = 1;
+					oneshot = false;
+
+					fni++;
+					fnh = &(hook_settings->fn_hooks[fni]);
+
+					continue;
+					
 				error:
 					LH_ERROR("HOOK FAILED!");
 					if(lib_to_hook->mmap != 0){
@@ -1257,7 +1265,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 			}
 			
 			//If the hook succeded and the used defined a post hook function, call it
-			if (hook_successful && hook_settings->autoinit_post != NULL){
+			if (hook_successful && hook_settings->autoinit_post != 0){
 				LH_VERBOSE(2, "Calling autoinit_post " LX, hook_settings->autoinit_post);
 				lh_call_func(lh, &iregs, (uintptr_t) hook_settings->autoinit_post, "autoinit_post", r_procmem + r_strBlkSz, 0);
 				if(errno) break;
