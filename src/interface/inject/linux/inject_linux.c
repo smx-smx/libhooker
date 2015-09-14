@@ -623,7 +623,8 @@ uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function
 		return 0;
 	// Return result
 	uintptr_t re = lh_rget_ax(iregs);
-	LH_VERBOSE(2, "CALL: %s(0x" LX ", 0x" LX ") => "LX"", funcname, arg0, arg1, re);
+	if(funcname && strlen(funcname) > 0)
+		LH_VERBOSE(2, "CALL: %s(0x" LX ", 0x" LX ") => "LX"", funcname, arg0, arg1, re);
 	return re;
 }
 
@@ -644,82 +645,86 @@ int inj_pokedata(pid_t pid, uintptr_t destaddr, uintptr_t data) {
 	return LH_SUCCESS;
 }
 
-int inj_build_payload(uintptr_t hook_addr, uintptr_t source_addr, 
-	uint8_t *payload_out, size_t *payload_size, size_t *replacement_size)
-{
-	int result = LH_SUCCESS;
-
+uint8_t *inj_build_jump(uintptr_t addr, size_t *jumpSz){
 	void *sljit_code = NULL;
 	struct sljit_compiler *compiler = NULL;
-	size_t payload_codeSz = 0;
 
 	compiler = sljit_create_compiler();
-	if (!compiler){
+	if(!compiler){
 		LH_ERROR("Unable to create sljit compiler instance");
-		result = -1;
-		goto end_payload;
+		return NULL;
 	}
 
-	// JUMP back to original code (skip the original bytes that have been replaced to avoid loop)
-	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, source_addr);
+	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, addr);
 
-	#ifndef LH_JUMP_ABS
-	// Call the replacement function from trampoline with an absolute jump (ABSJMP)
-	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, hook_addr);
-	#endif
 
 	sljit_code = sljit_generate_code(compiler);
 	if(!sljit_code){
-		LH_ERROR("Unable to build payload!");
-		result = -1;
+		LH_ERROR("Unable to build jump!");
 	} else {
-		payload_codeSz = compiler->size;
-		if(payload_size)
-			*payload_size = payload_codeSz;
-		if(payload_out)
-			memcpy(payload_out, sljit_code, compiler->size);
+		if(jumpSz){
+			*jumpSz = compiler->size;
+		}
 	}
 
-	end_payload:
-		if(compiler)
-			sljit_free_compiler(compiler);
-		if(sljit_code)
-			sljit_free_code(sljit_code);
-		if(result < 0)
-			return result;
+	if(compiler)
+		sljit_free_compiler(compiler);
 
-	compiler = sljit_create_compiler();
-	if (!compiler){
-		LH_ERROR("Unable to create sljit compiler instance");
-		result = -1;
-		goto end_hook;
+	return (uint8_t *)sljit_code;
+}
+
+int inj_build_payload(uintptr_t hook_addr, uintptr_t source_addr, uintptr_t r_trampoline_addr,
+	uint8_t *payload_out, size_t *payload_size, size_t *replacement_size)
+{
+
+	size_t payload_codeSz = 0, jumpSz=0;
+
+	uint8_t *ocode = NULL, *replacement = NULL;
+
+	// JUMP back to original code (skip the original bytes that have been replaced to avoid loop)	
+	if(!(ocode = inj_build_jump(source_addr, &jumpSz)))
+		return -1;
+
+	if(payload_out){
+		memcpy(payload_out + payload_codeSz, ocode, jumpSz);
+		sljit_free_code(ocode);
 	}
+
+	payload_codeSz += jumpSz;
+
+	if(payload_size)
+		*payload_size = payload_codeSz;
 
 	#ifdef LH_JUMP_ABS
 	//JUMP from symboladdr to hook directly
-	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, hook_addr);
+	replacement = inj_build_jump(hook_addr, &jumpSz);
 	#else
-	//JUMP from symboladdr to TRAMPOLINE (r_hook_abs_jump_address)
-	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, r_hook_abs_jump_address);
+	r_trampoline_addr += jumpSz;
+	uint8_t *trampoline = NULL;
+	// Call the replacement function from trampoline with an absolute jump (ABSJMP)
+	if(!(trampoline = inj_build_jump(hook_addr, &jumpSz)))
+		return -1;
+	if(payload_out){
+		memcpy(payload_out + payload_codeSz, trampoline, jumpSz);
+		sljit_free_code(trampoline);
+	}
+	payload_codeSz += jumpSz;
+	if(payload_size)
+		*payload_size = payload_codeSz;
+	//JUMP from symboladdr to TRAMPOLINE (r_trampoline_addr)
+	replacement = inj_build_jump(r_trampoline_addr, &jumpSz);
 	#endif
 
-	sljit_code = sljit_generate_code(compiler);
-	if(!sljit_code){
-		LH_ERROR("Unable to build payload!");
-		result = -1;
-	} else {
-		if(replacement_size)
-			*replacement_size = compiler->size;
-		if(payload_out)
-			memcpy(payload_out + payload_codeSz, sljit_code, compiler->size);
+	if(payload_out){
+		memcpy(payload_out + payload_codeSz, replacement, jumpSz);
+		sljit_free_code(replacement);
 	}
 
-	end_hook:
-		if(compiler)
-			sljit_free_compiler(compiler);
-		if(sljit_code)
-			sljit_free_code(sljit_code);
-			return result;
+	payload_codeSz += jumpSz;
+	if(replacement_size)
+		*replacement_size = jumpSz;
+
+	return LH_SUCCESS;
 }
 
 /*
@@ -742,7 +747,7 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 		uintptr_t wanted_address = (uintptr_t) address;
 		LH_VERBOSE(4, "Wanted address for mmap: " LX, wanted_address);
 
-		uintptr_t returned = lh_call_func(lh, iregs, lhm_mmap, "mmap", wanted_address, MMAP_SIZE);
+		uintptr_t returned = lh_call_func(lh, iregs, lhm_mmap, NULL, wanted_address, MMAP_SIZE);
 		if(errno) break;
 
 		// If the memory has been mapped at the wanted address
@@ -753,7 +758,7 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 			return;
 		}
 		// Free the memory mapped by the OS
-		lh_call_func(lh, iregs, lhm_munmap, "munmap", returned, MMAP_SIZE);
+		lh_call_func(lh, iregs, lhm_munmap, NULL, returned, MMAP_SIZE);
 		if(errno) break;
 	}
 
@@ -1166,10 +1171,10 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				}
 
 				size_t payload_codeSz = 0, replacement_codeSz = 0;
-				uintptr_t r_addr_to_call_orig_fn = lib_to_hook->mmap;
+				uintptr_t r_ocode_addr = lib_to_hook->mmap;
 
 				//get payload size first
-				if(inj_build_payload(fnh->hook_fn, symboladdr, NULL, &payload_codeSz, &replacement_codeSz) < 0){
+				if(inj_build_payload(fnh->hook_fn, symboladdr, r_ocode_addr, NULL, &payload_codeSz, &replacement_codeSz) < 0){
 					LH_ERROR("Cannot build payload!");
 					break;
 				}
@@ -1188,7 +1193,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				if(fnh->opcode_bytes_to_restore > 0){
 					num_opcode_bytes = fnh->opcode_bytes_to_restore;
 				} else {
-					num_opcode_bytes = inj_getbackup_size(rcode, LHM_FN_COPY_BYTES, payload_codeSz);
+					num_opcode_bytes = inj_getbackup_size(rcode, LHM_FN_COPY_BYTES, replacement_codeSz);
 				}
 					
 				if(num_opcode_bytes < 0){
@@ -1227,7 +1232,11 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 				//Build the actual payload
 				//We update the sizes, in the event they changed
-				if(inj_build_payload(fnh->hook_fn, symboladdr + num_opcode_bytes, l_new_payload, &payload_codeSz, &replacement_codeSz) < 0){
+				if(inj_build_payload(fnh->hook_fn,
+						symboladdr + num_opcode_bytes,
+						lib_to_hook->mmap,
+						l_new_payload, &payload_codeSz, &replacement_codeSz) < 0
+				){
 					LH_ERROR("Cannot build payload!");
 					break;
 				}
@@ -1274,7 +1283,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				after_hook:
 					// We store the original function address, if wanted
 					if (fnh->orig_function_ptr != 0) {
-						uintptr_t func_addr = (do_hook) ? r_addr_to_call_orig_fn : symboladdr;
+						uintptr_t func_addr = (do_hook) ? r_ocode_addr : symboladdr;
 						if (LH_SUCCESS != inj_pokedata(lh->proc.pid, fnh->orig_function_ptr, func_addr)) {
 							LH_ERROR("Failed to copy original bytes");
 							goto error;
