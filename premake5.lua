@@ -78,6 +78,7 @@ solution "libhooker"
 	project "needle"
 		kind "ConsoleApp"
 		files {
+			"src/interface/cpu/cpu_common.c",
 			"src/needle/*.c"
 		}
 
