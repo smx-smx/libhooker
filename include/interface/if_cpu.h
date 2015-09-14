@@ -30,6 +30,7 @@ struct user {
 size_t inj_getjmp_size();
 int inj_build_jump(uint8_t *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address);
 int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz);
+int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintptr_t destPC);
 
 
 /* 
