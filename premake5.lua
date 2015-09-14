@@ -125,4 +125,8 @@ solution "libhooker"
 		project "lhm_sample"
 			kind "SharedLib"
 			files { "modules/sample/*.c" }
-			links { "lh_basemod" }
+			links { "lh_common", "lh_basemod" }
+
+		if os.isfile("modules.lua") then
+			include("modules.lua");
+		end

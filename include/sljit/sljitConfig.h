@@ -105,7 +105,7 @@
 /* Debug checks (assertions, etc.). */
 #ifndef SLJIT_DEBUG
 /* Enabled by default */
-#define SLJIT_DEBUG 1
+#define SLJIT_DEBUG 0
 #endif
 
 /* Verbose operations. */
