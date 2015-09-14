@@ -234,12 +234,17 @@ case $MACH in
 		ok "i386 detected"
 		CONF_ARCH="i386"
 		;;
-	arm*)
-		ok "arm detected"
-		CONF_ARCH="arm"
+	armv5*)
+		ok "arm v5 detected"
+		CONF_ARCH="armv5"
+		;;
+	armv7*)
+		ok "arm v7 detected"
+		CONF_ARCH="armv7"
 		;;
 	*)
-		err_exit "Unsupported Architecture '$MACH'"
+		warn "Couldn't detect machine, trying AUTO detection..."
+		CONF_ARCH="auto"
 		;;
 esac
 
