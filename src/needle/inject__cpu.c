@@ -1,21 +1,4 @@
 #include "interface/if_cpu.h"
-
-size_t inj_getjmp_size(){
-	#ifdef LH_JUMP_ABS
-		return inj_absjmp_opcode_bytes();
-	#else
-		return inj_reljmp_opcode_bytes();
-	#endif
-}
-
-int inj_build_jump(uint8_t *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address){
-	#ifdef LH_JUMP_ABS
-		return inj_build_abs_jump(buffer, jump_destination, jump_opcode_address);
-	#else
-		return inj_build_rel_jump(buffer, jump_destination, jump_opcode_address);
-	#endif
-}
-
 int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz){
 	int i = 0, opSz;
 	if((opSz = inj_opcode_bytes()) > 0){ //fixed opcode size
@@ -38,3 +21,12 @@ int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz){
 	}
 	return -1;
 }
+
+/*
+ * Relocates code pointed by codePtr from sourcePC to destPC
+ */
+#if !defined(__i386__) && !defined(__x86_64__)
+int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintptr_t destPC){
+	return LH_SUCCESS;
+}
+#endif

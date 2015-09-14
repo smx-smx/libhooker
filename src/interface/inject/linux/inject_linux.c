@@ -13,6 +13,9 @@
 //debug
 #include <time.h>
 
+//sljit
+#include <sljit/sljitLir.h>
+
 //everything we need to work on linux
 #include "interface/inject/inject_linux.h"
 #include "lh_module.h"
@@ -641,6 +644,84 @@ int inj_pokedata(pid_t pid, uintptr_t destaddr, uintptr_t data) {
 	return LH_SUCCESS;
 }
 
+int inj_build_payload(uintptr_t hook_addr, uintptr_t source_addr, 
+	uint8_t *payload_out, size_t *payload_size, size_t *replacement_size)
+{
+	int result = LH_SUCCESS;
+
+	void *sljit_code = NULL;
+	struct sljit_compiler *compiler = NULL;
+	size_t payload_codeSz = 0;
+
+	compiler = sljit_create_compiler();
+	if (!compiler){
+		LH_ERROR("Unable to create sljit compiler instance");
+		result = -1;
+		goto end_payload;
+	}
+
+	// JUMP back to original code (skip the original bytes that have been replaced to avoid loop)
+	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, source_addr);
+
+	#ifndef LH_JUMP_ABS
+	// Call the replacement function from trampoline with an absolute jump (ABSJMP)
+	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, hook_addr);
+	#endif
+
+	sljit_code = sljit_generate_code(compiler);
+	if(!sljit_code){
+		LH_ERROR("Unable to build payload!");
+		result = -1;
+	} else {
+		payload_codeSz = compiler->size;
+		if(payload_size)
+			*payload_size = payload_codeSz;
+		if(payload_out)
+			memcpy(payload_out, sljit_code, compiler->size);
+	}
+
+	end_payload:
+		if(compiler)
+			sljit_free_compiler(compiler);
+		if(sljit_code)
+			sljit_free_code(sljit_code);
+		if(result < 0)
+			return result;
+
+	compiler = sljit_create_compiler();
+	if (!compiler){
+		LH_ERROR("Unable to create sljit compiler instance");
+		result = -1;
+		goto end_hook;
+	}
+
+	#ifdef LH_JUMP_ABS
+	//JUMP from symboladdr to hook directly
+	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, hook_addr);
+	#else
+	//JUMP from symboladdr to TRAMPOLINE (r_hook_abs_jump_address)
+	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, r_hook_abs_jump_address);
+	#endif
+
+	sljit_code = sljit_generate_code(compiler);
+	if(!sljit_code){
+		LH_ERROR("Unable to build payload!");
+		result = -1;
+	} else {
+		if(replacement_size)
+			*replacement_size = compiler->size;
+		if(payload_out)
+			memcpy(payload_out + payload_codeSz, sljit_code, compiler->size);
+	}
+
+	end_hook:
+		if(compiler)
+			sljit_free_compiler(compiler);
+		if(sljit_code)
+			sljit_free_code(sljit_code);
+			return result;
+}
+
 /*
  * Calls mmap in the tracked pid
  */
@@ -1036,38 +1117,6 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					do_hook = 0;
 					goto after_hook;
 				}
-
-				// Get the number of bytes required to build an absolute jump
-				int abs_jump_size = inj_absjmp_opcode_bytes();
-
-				// Variable jump size (depends on LH_JUMP_ABS)
-				#ifdef LH_JUMP_ABS
-				int var_jump_size = abs_jump_size;
-				#else
-				int rel_jump_size = inj_reljmp_opcode_bytes();
-				int var_jump_size = rel_jump_size;
-				#endif
-
-				// Check that the user provided enough bytes to replace in the hook settings
-				uint8_t *rcode = inj_blowdata(lh->proc.pid, symboladdr, LHM_FN_COPY_BYTES);
-				if(rcode == NULL){
-					LH_PRINT("ERROR: Can't read code at 0x"LX, symboladdr);
-					break;
-				}
-				
-				int num_opcode_bytes;
-				if(fnh->opcode_bytes_to_restore > 0)
-					num_opcode_bytes = fnh->opcode_bytes_to_restore;
-				else
-					num_opcode_bytes = inj_getbackup_size(rcode, LHM_FN_COPY_BYTES, var_jump_size);
-					
-				if(num_opcode_bytes < 0){
-					LH_ERROR("Cannot determine number of opcode bytes to save");
-					LH_PRINT("Code size of %d may be too small", LHM_FN_COPY_BYTES);
-					num_opcode_bytes = LHM_FN_COPY_BYTES;
-				}
-				free(rcode);
-				LH_PRINT("Opcode bytes to save: %d", num_opcode_bytes);
 				
 				//If we haven't allocated a payload buffer yet
 				if (lib_to_hook->mmap == 0)
@@ -1111,25 +1160,53 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 				// Position of payload in target address space 
 				uintptr_t r_payload_start = lib_to_hook->mmap;
-				// Size of the trampolines
-				#ifdef LH_JUMP_ABS
-				size_t payload_size = abs_jump_size;
-				#else
-				size_t payload_size = rel_jump_size + abs_jump_size;
-				#endif
-
-				size_t hook_area = num_opcode_bytes + payload_size;
-				uintptr_t mmap_after_payload = lib_to_hook->mmap + hook_area;
-
-				if ((mmap_after_payload > lib_to_hook->mmap_end) || (lib_to_hook->mmap + LHM_FN_COPY_BYTES > lib_to_hook->mmap_end)) {
+				if (lib_to_hook->mmap + LHM_FN_COPY_BYTES > lib_to_hook->mmap_end) {
 					LH_PRINT("ERROR: not enough memory for hook_settings->fn_hooks[%d]", fni);
 					break;
 				}
 
-				// Copy original function to mmapped area (OCODE)
-				LH_PRINT("Copying original %d bytes", num_opcode_bytes);
+				size_t payload_codeSz = 0, replacement_codeSz = 0;
+				uintptr_t r_addr_to_call_orig_fn = lib_to_hook->mmap;
+
+				//get payload size first
+				if(inj_build_payload(fnh->hook_fn, symboladdr, NULL, &payload_codeSz, &replacement_codeSz) < 0){
+					LH_ERROR("Cannot build payload!");
+					break;
+				}
+				LH_PRINT("Payload     Code Size: %d", payload_codeSz);
+				LH_PRINT("Replacement Code Size: %d", replacement_codeSz);
+
+
+				// Check that the user provided enough bytes to replace in the hook settings
+				uint8_t *rcode = inj_blowdata(lh->proc.pid, symboladdr, LHM_FN_COPY_BYTES);
+				if(rcode == NULL){
+					LH_PRINT("ERROR: Can't read code at 0x"LX, symboladdr);
+					break;
+				}
+				
+				int num_opcode_bytes;
+				if(fnh->opcode_bytes_to_restore > 0){
+					num_opcode_bytes = fnh->opcode_bytes_to_restore;
+				} else {
+					num_opcode_bytes = inj_getbackup_size(rcode, LHM_FN_COPY_BYTES, payload_codeSz);
+				}
+					
+				if(num_opcode_bytes < 0){
+					LH_ERROR("Cannot determine number of opcode bytes to save");
+					LH_PRINT("Code size of %d may be too small", LHM_FN_COPY_BYTES);
+					num_opcode_bytes = LHM_FN_COPY_BYTES;
+				}
+				free(rcode);
+				LH_PRINT("Opcode bytes to save: %d", num_opcode_bytes);
+
+				// Backup original code to mmapped area (OCODE)
+				LH_PRINT("Copying %d original bytes", num_opcode_bytes);
 				//Read the code from the process
 				uint8_t *origCode = inj_blowdata(lh->proc.pid, symboladdr, num_opcode_bytes);
+
+				//Check that the code doesn't contain PC-related operations)
+				inj_relocate_code(origCode, num_opcode_bytes, symboladdr, lib_to_hook->mmap);
+
 				//And write it back in another location
 				if (LH_SUCCESS != inj_copydata(lh->proc.pid, lib_to_hook->mmap, origCode, num_opcode_bytes)) {
 					LH_ERROR("Failed to copy original bytes");
@@ -1137,85 +1214,46 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				}
 				free(origCode);
 
-				// Copy LHM_FN_COPY_BYTES bytes (25) of the original function to mmapped area (OCODE)
-				/*result = lh_call_func(lh, &iregs, lhm_memcpy, "lhm_memcpy", lib_to_hook->mmap, symboladdr); // lh_memcpy has size hardcoded to value defined in LHM_FN_COPY_BYTES
-				
-				if (errno || lib_to_hook->mmap != result) {
-					LH_ERROR("Failed to copy original bytes");
-					break;
-				}*/
-
-				uintptr_t r_addr_to_call_orig_fn = lib_to_hook->mmap;
+				//We just added original code to the memory map
 				lib_to_hook->mmap += num_opcode_bytes;
-
 				uintptr_t r_new_payload_address = lib_to_hook->mmap;
-				
+
 				// Allocate space for the payload
-				unsigned char *l_new_payload = (unsigned char *)calloc(1, payload_size);
+				uint8_t *l_new_payload = (uint8_t *)calloc(1, payload_codeSz + replacement_codeSz);
 				if (!l_new_payload) {
 					LH_ERROR_SE("malloc");
 					goto error;
 				}
 
-				unsigned char *l_new_payload_start = l_new_payload;
+				//Build the actual payload
+				//We update the sizes, in the event they changed
+				if(inj_build_payload(fnh->hook_fn, symboladdr + num_opcode_bytes, l_new_payload, &payload_codeSz, &replacement_codeSz) < 0){
+					LH_ERROR("Cannot build payload!");
+					break;
+				}
 
-				LH_VERBOSE(4, "REL/ABS JUMP CALCULATION: this is the place, where the control flow must jump back to the original place");
-
-				// JUMP from payload to original code (skip the original bytes that have been replaced to avoid loop) (RELJMP)
-				if (LH_SUCCESS != inj_build_jump(l_new_payload_start, symboladdr + num_opcode_bytes, r_new_payload_address)) {
-					LH_ERROR("Unable to build relative/absolute jump");
+				// Check we have enough room
+				if (lib_to_hook->mmap > lib_to_hook->mmap_end) {
+					LH_ERROR("Not enough memory!");
 					goto error;
 				}
-				
-				lib_to_hook->mmap += var_jump_size;
-				l_new_payload += var_jump_size;
 
-				#ifndef LH_JUMP_ABS
-				// Call the replacement function from trampoline with an absolute jump (ABSJMP)
-				uintptr_t r_hook_abs_jump_address = lib_to_hook->mmap;
-				if (LH_SUCCESS != inj_build_abs_jump(l_new_payload, fnh->hook_fn, r_new_payload_address + var_jump_size)) {
-					LH_ERROR("Unable to build absolute jump");
-					goto error;
-				}
-				lib_to_hook->mmap += abs_jump_size;
-				l_new_payload += abs_jump_size;
-				#endif
-
-				// assert
-				if (lib_to_hook->mmap != mmap_after_payload) {
-					LH_ERROR("Seems we broke up something, mmap address is not the same as wanted");
-					LH_PRINT("Expected: "LX", got "LX, mmap_after_payload, lib_to_hook->mmap);
-					goto error;
-				}
 
 				// Copy payload to tracked program
-				if (LH_SUCCESS != inj_copydata(lh->proc.pid, r_new_payload_address, l_new_payload_start, payload_size)) {
+				if (LH_SUCCESS != inj_copydata(lh->proc.pid, r_new_payload_address, l_new_payload, payload_codeSz)) {
 					LH_ERROR("Unable to copy payload");
 					goto error;
 				}
 
-				LH_VERBOSE(4, "REL/ABS JUMP CALCULATION: and now we overwrite the original function with our jump to the payload");
-
-				#ifdef LH_JUMP_ABS
-				//JUMP from symboladdr to hook directly
-				if (LH_SUCCESS != inj_build_abs_jump(l_new_payload_start, fnh->hook_fn, symboladdr)) {
-					LH_ERROR("Failed to build absolute jump for the replacement");
-					goto error;
-				}
-				#else
-				//JUMP from symboladdr to TRAMPOLINE (r_hook_abs_jump_address)
-				if (LH_SUCCESS != inj_build_rel_jump(l_new_payload_start, r_hook_abs_jump_address, symboladdr)) {
-					LH_ERROR("Failed to build relative jump for the replacement");
-					goto error;
-				}
-				#endif
+				//Now payload is ready, move onto the original function
 
 				LH_VERBOSE(4, "------------------------------------- replacing first opcodes for %s/%s begin:", fnh->libname, fnh->symname);
 				// Copy the jump to trampoline/code in place of the original function
-				if (LH_SUCCESS != inj_copydata(lh->proc.pid, symboladdr, l_new_payload_start, var_jump_size)) {
+				if (LH_SUCCESS != inj_copydata(lh->proc.pid, symboladdr, l_new_payload + payload_codeSz, payload_codeSz)) {
 					LH_ERROR("Unable to copy back relative/absolute jump into the original function");
 					goto error;
 				}
+
 				LH_VERBOSE(4, "------------------------------------- replacing first opcodes for %s/%s end", fnh->libname, fnh->symname);
 
 				if (lh_verbose > 3) {
@@ -1225,13 +1263,13 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 						break;
 
 					LH_VERBOSE(4, "Dumping the corresponding payload area");
-					lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", r_payload_start, hook_area);
+					lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", r_payload_start, payload_codeSz);
 					if(errno)
 						break;
 				}
 				
-				if(l_new_payload_start)
-						free(l_new_payload_start);
+				if(l_new_payload)
+						free(l_new_payload);
 						
 				after_hook:
 					// We store the original function address, if wanted
@@ -1256,10 +1294,11 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					if(lib_to_hook->mmap != 0){
 						LH_VERBOSE(3, "Freeing the memory map");
 						lh_call_func(lh, &iregs, lhm_munmap, "munmap", lib_to_hook->mmap, MMAP_SIZE);
-						if(errno) break;
+						if(errno)
+							break;
 					}
-					if(l_new_payload_start)
-						free(l_new_payload_start);
+					if(l_new_payload)
+						free(l_new_payload);
 					break;
 				
 			}
@@ -1303,23 +1342,3 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 	return rc;
 
 }
-
-/*
-void lh_hook_init(lh_session_t* session) {
-  LH_VERBOSE(1,"Shared object init is running");
-
-  LH_VERBOSE(1,"Autoinit pre: "LX, hook_settings.autoinit_pre);
-  if(hook_settings.autoinit_pre != NULL) {
-     int a = hook_settings.autoinit_pre(session);
-     LH_VERBOSE(1,"Autoinit returned %d", a);
-     if(a != LH_SUCCESS) return;
-  }
-
-  // TODO?
-
-  LH_VERBOSE(1,"Autoinit post: "LX, hook_settings.autoinit_post);
-  if(hook_settings.autoinit_post != NULL) {
-     hook_settings.autoinit_post(session);
-  }
-}
-*/
