@@ -32,17 +32,27 @@ solution "libhooker"
 		defines { "SLJIT_CONFIG_X86_32" }
 		architecture "x86"
 		links { "capstone" }
+		files {
+			"src/interface/cpu/intel/common_intel.c",
+			"src/interface/cpu/intel/cpu_i386.c",
+		}
 	
 	filter "configurations:x86_64"
 		defines { "SLJIT_CONFIG_X86_64" }
 		architecture "x86_64"
 		links { "capstone" }
+		files {
+			"src/interface/cpu/intel/common_intel.c",
+			"src/interface/cpu/intel/cpu_x86_64.c",
+		}
 
 	filter "configurations:armv5"
 		defines { "SLJIT_CONFIG_ARM_V5" }
+		files { "src/interface/cpu/arm/cpu_arm.c" }
 
 	filter "configurations:armv7"
 		defines { "SLJIT_CONFIG_ARM_V7" }
+		files { "src/interface/cpu/arm/cpu_arm.c" }
 
 	filter "configurations:armthumb2"
 		defines { "SLJIT_CONFIG_ARM_THUMB2" }
@@ -87,23 +97,6 @@ solution "libhooker"
 		files {
 			"src/interface/cpu/sljit/sljitLir.c",
 		}
-
-		filter "configurations:i386"
-			files {
-				"src/interface/cpu/intel/common_intel.c",
-				"src/interface/cpu/intel/cpu_i386.c",
-			}
-		
-		filter "configurations:x86_64"
-			files {
-				"src/interface/cpu/intel/common_intel.c",
-				"src/interface/cpu/intel/cpu_x86_64.c",
-			}
-		
-		filter "configurations:arm32"
-			files {
-				"src/interface/cpu/arm/cpu_arm.c"
-			}
 
 		filter "platforms:linux"
 			files {
