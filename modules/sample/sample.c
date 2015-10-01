@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "lh_module.h"
 #include <sys/mman.h>
+#include <signal.h>
 
 void (*original_test_function) (int a, char *b);
 
@@ -8,9 +9,26 @@ void hooked_autoinit_post(lh_r_process_t * proc) {
 	LH_PRINT("This function is called after the wanted functions are hooked.");
 }
 
+static void onSigSegv(int signum){
+	raise(SIGSTOP);
+}
+
+void installHandler(){
+	struct sigaction sa;
+	sa.sa_handler = onSigSegv;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART;
+	if (sigaction(SIGSEGV, &sa, NULL) == -1){
+		LH_PRINT("CANNOT SET SIGSEGV HANDLER!");
+	}
+}
+
+
 int hooked_autoinit(int argc, char **argv) {
 	lh_r_process_t *proc = lh_get_procinfo(argc, argv);
 	original_test_function = NULL;
+
+	installHandler();
 
 	LH_PRINT("");
 	LH_PRINT("");

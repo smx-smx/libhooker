@@ -325,9 +325,9 @@ static sljit_si compiler_initialized = 0;
 static void init_compiler(void);
 #endif
 
-SLJIT_API_FUNC_ATTRIBUTE struct sljit_compiler* sljit_create_compiler(void)
+SLJIT_API_FUNC_ATTRIBUTE struct sljit_compiler* sljit_create_compiler(void *allocator_data)
 {
-	struct sljit_compiler *compiler = (struct sljit_compiler*)SLJIT_MALLOC(sizeof(struct sljit_compiler));
+	struct sljit_compiler *compiler = (struct sljit_compiler*)SLJIT_MALLOC(sizeof(struct sljit_compiler), allocator_data);
 	if (!compiler)
 		return NULL;
 	SLJIT_ZEROMEM(compiler, sizeof(struct sljit_compiler));
@@ -349,15 +349,16 @@ SLJIT_API_FUNC_ATTRIBUTE struct sljit_compiler* sljit_create_compiler(void)
 	/* Only the non-zero members must be set. */
 	compiler->error = SLJIT_SUCCESS;
 
-	compiler->buf = (struct sljit_memory_fragment*)SLJIT_MALLOC(BUF_SIZE);
-	compiler->abuf = (struct sljit_memory_fragment*)SLJIT_MALLOC(ABUF_SIZE);
+	compiler->allocator_data = allocator_data;
+	compiler->buf = (struct sljit_memory_fragment*)SLJIT_MALLOC(BUF_SIZE, allocator_data);
+	compiler->abuf = (struct sljit_memory_fragment*)SLJIT_MALLOC(ABUF_SIZE, allocator_data);
 
 	if (!compiler->buf || !compiler->abuf) {
 		if (compiler->buf)
-			SLJIT_FREE(compiler->buf);
+			SLJIT_FREE(compiler->buf, allocator_data);
 		if (compiler->abuf)
-			SLJIT_FREE(compiler->abuf);
-		SLJIT_FREE(compiler);
+			SLJIT_FREE(compiler->abuf, allocator_data);
+		SLJIT_FREE(compiler, allocator_data);
 		return NULL;
 	}
 
@@ -377,11 +378,12 @@ SLJIT_API_FUNC_ATTRIBUTE struct sljit_compiler* sljit_create_compiler(void)
 #endif
 
 #if (defined SLJIT_CONFIG_ARM_V5 && SLJIT_CONFIG_ARM_V5)
-	compiler->cpool = (sljit_uw*)SLJIT_MALLOC(CPOOL_SIZE * sizeof(sljit_uw) + CPOOL_SIZE * sizeof(sljit_ub));
+	compiler->cpool = (sljit_uw*)SLJIT_MALLOC(CPOOL_SIZE * sizeof(sljit_uw)
+		+ CPOOL_SIZE * sizeof(sljit_ub), allocator_data);
 	if (!compiler->cpool) {
-		SLJIT_FREE(compiler->buf);
-		SLJIT_FREE(compiler->abuf);
-		SLJIT_FREE(compiler);
+		SLJIT_FREE(compiler->buf, allocator_data);
+		SLJIT_FREE(compiler->abuf, allocator_data);
+		SLJIT_FREE(compiler, allocator_data);
 		return NULL;
 	}
 	compiler->cpool_unique = (sljit_ub*)(compiler->cpool + CPOOL_SIZE);
@@ -410,25 +412,33 @@ SLJIT_API_FUNC_ATTRIBUTE void sljit_free_compiler(struct sljit_compiler *compile
 {
 	struct sljit_memory_fragment *buf;
 	struct sljit_memory_fragment *curr;
+	void *allocator_data = compiler->allocator_data;
+	SLJIT_UNUSED_ARG(allocator_data);
 
 	buf = compiler->buf;
 	while (buf) {
 		curr = buf;
 		buf = buf->next;
-		SLJIT_FREE(curr);
+		SLJIT_FREE(curr, allocator_data);
 	}
 
 	buf = compiler->abuf;
 	while (buf) {
 		curr = buf;
 		buf = buf->next;
-		SLJIT_FREE(curr);
+		SLJIT_FREE(curr, allocator_data);
 	}
 
 #if (defined SLJIT_CONFIG_ARM_V5 && SLJIT_CONFIG_ARM_V5)
-	SLJIT_FREE(compiler->cpool);
+	SLJIT_FREE(compiler->cpool, allocator_data);
 #endif
-	SLJIT_FREE(compiler);
+	SLJIT_FREE(compiler, allocator_data);
+}
+
+SLJIT_API_FUNC_ATTRIBUTE void sljit_set_compiler_memory_error(struct sljit_compiler *compiler)
+{
+	if (compiler->error == SLJIT_SUCCESS)
+		compiler->error = SLJIT_ERR_ALLOC_FAILED;
 }
 
 #if (defined SLJIT_CONFIG_ARM_THUMB2 && SLJIT_CONFIG_ARM_THUMB2)
@@ -484,7 +494,7 @@ static void* ensure_buf(struct sljit_compiler *compiler, sljit_uw size)
 		compiler->buf->used_size += size;
 		return ret;
 	}
-	new_frag = (struct sljit_memory_fragment*)SLJIT_MALLOC(BUF_SIZE);
+	new_frag = (struct sljit_memory_fragment*)SLJIT_MALLOC(BUF_SIZE, compiler->allocator_data);
 	PTR_FAIL_IF_NULL(new_frag);
 	new_frag->next = compiler->buf;
 	compiler->buf = new_frag;
@@ -503,7 +513,7 @@ static void* ensure_abuf(struct sljit_compiler *compiler, sljit_uw size)
 		compiler->abuf->used_size += size;
 		return ret;
 	}
-	new_frag = (struct sljit_memory_fragment*)SLJIT_MALLOC(ABUF_SIZE);
+	new_frag = (struct sljit_memory_fragment*)SLJIT_MALLOC(ABUF_SIZE, compiler->allocator_data);
 	PTR_FAIL_IF_NULL(new_frag);
 	new_frag->next = compiler->abuf;
 	compiler->abuf = new_frag;
@@ -547,6 +557,7 @@ static SLJIT_INLINE void set_emit_enter(struct sljit_compiler *compiler,
 	sljit_si options, sljit_si args, sljit_si scratches, sljit_si saveds,
 	sljit_si fscratches, sljit_si fsaveds, sljit_si local_size)
 {
+	SLJIT_UNUSED_ARG(args);
 	SLJIT_UNUSED_ARG(local_size);
 
 	compiler->options = options;
@@ -563,6 +574,7 @@ static SLJIT_INLINE void set_set_context(struct sljit_compiler *compiler,
 	sljit_si options, sljit_si args, sljit_si scratches, sljit_si saveds,
 	sljit_si fscratches, sljit_si fsaveds, sljit_si local_size)
 {
+	SLJIT_UNUSED_ARG(args);
 	SLJIT_UNUSED_ARG(local_size);
 
 	compiler->options = options;
@@ -833,8 +845,8 @@ SLJIT_API_FUNC_ATTRIBUTE void sljit_compiler_verbose(struct sljit_compiler *comp
 	}
 
 static SLJIT_CONST char* op0_names[] = {
-	(char*)"breakpoint", (char*)"nop",
-	(char*)"lumul", (char*)"lsmul", (char*)"ludiv", (char*)"lsdiv",
+	(char*)"breakpoint", (char*)"nop", (char*)"lumul", (char*)"lsmul",
+	(char*)"udivmod", (char*)"sdivmod", (char*)"udivi", (char*)"sdivi"
 };
 
 static SLJIT_CONST char* op1_names[] = {
@@ -1024,7 +1036,7 @@ static SLJIT_INLINE CHECK_RETURN_TYPE check_sljit_emit_op0(struct sljit_compiler
 {
 #if (defined SLJIT_ARGUMENT_CHECKS && SLJIT_ARGUMENT_CHECKS)
 	CHECK_ARGUMENT((op >= SLJIT_BREAKPOINT && op <= SLJIT_LSMUL)
-		|| ((op & ~SLJIT_INT_OP) >= SLJIT_LUDIV && (op & ~SLJIT_INT_OP) <= SLJIT_LSDIV));
+		|| ((op & ~SLJIT_INT_OP) >= SLJIT_UDIVMOD && (op & ~SLJIT_INT_OP) <= SLJIT_SDIVI));
 	CHECK_ARGUMENT(op < SLJIT_LUMUL || compiler->scratches >= 2);
 #endif
 #if (defined SLJIT_VERBOSE && SLJIT_VERBOSE)
@@ -1319,6 +1331,7 @@ static SLJIT_INLINE CHECK_RETURN_TYPE check_sljit_emit_jump(struct sljit_compile
 	CHECK_ARGUMENT(!(type & ~(0xff | SLJIT_REWRITABLE_JUMP | SLJIT_INT_OP)));
 	CHECK_ARGUMENT((type & 0xff) >= SLJIT_EQUAL && (type & 0xff) <= SLJIT_CALL3);
 	CHECK_ARGUMENT((type & 0xff) < SLJIT_JUMP || !(type & SLJIT_INT_OP));
+	CHECK_ARGUMENT((type & 0xff) <= SLJIT_CALL0 || ((type & 0xff) - SLJIT_CALL0) <= compiler->scratches);
 #endif
 #if (defined SLJIT_VERBOSE && SLJIT_VERBOSE)
 	if (SLJIT_UNLIKELY(!!compiler->verbose))
@@ -1384,6 +1397,7 @@ static SLJIT_INLINE CHECK_RETURN_TYPE check_sljit_emit_ijump(struct sljit_compil
 
 #if (defined SLJIT_ARGUMENT_CHECKS && SLJIT_ARGUMENT_CHECKS)
 	CHECK_ARGUMENT(type >= SLJIT_JUMP && type <= SLJIT_CALL3);
+	CHECK_ARGUMENT(type <= SLJIT_CALL0 || (type - SLJIT_CALL0) <= compiler->scratches);
 	FUNCTION_CHECK_SRC(src, srcw);
 #endif
 #if (defined SLJIT_VERBOSE && SLJIT_VERBOSE)
@@ -1433,6 +1447,8 @@ static SLJIT_INLINE CHECK_RETURN_TYPE check_sljit_emit_op_flags(struct sljit_com
 
 static SLJIT_INLINE CHECK_RETURN_TYPE check_sljit_get_local_base(struct sljit_compiler *compiler, sljit_si dst, sljit_sw dstw, sljit_sw offset)
 {
+	SLJIT_UNUSED_ARG(offset);
+
 #if (defined SLJIT_ARGUMENT_CHECKS && SLJIT_ARGUMENT_CHECKS)
 	FUNCTION_CHECK_DST(dst, dstw);
 #endif
@@ -1448,6 +1464,8 @@ static SLJIT_INLINE CHECK_RETURN_TYPE check_sljit_get_local_base(struct sljit_co
 
 static SLJIT_INLINE CHECK_RETURN_TYPE check_sljit_emit_const(struct sljit_compiler *compiler, sljit_si dst, sljit_sw dstw, sljit_sw init_value)
 {
+	SLJIT_UNUSED_ARG(init_value);
+
 #if (defined SLJIT_ARGUMENT_CHECKS && SLJIT_ARGUMENT_CHECKS)
 	FUNCTION_CHECK_DST(dst, dstw);
 #endif

@@ -307,6 +307,7 @@ struct sljit_compiler {
 	struct sljit_jump *last_jump;
 	struct sljit_const *last_const;
 
+	void *allocator_data;
 	struct sljit_memory_fragment *buf;
 	struct sljit_memory_fragment *abuf;
 
@@ -409,11 +410,16 @@ struct sljit_compiler {
 /*  Main functions                                                       */
 /* --------------------------------------------------------------------- */
 
-/* Creates an sljit compiler.
-   Returns NULL if failed. */
-SLJIT_API_FUNC_ATTRIBUTE struct sljit_compiler* sljit_create_compiler(void);
+/* Creates an sljit compiler. The allocator_data is required by some
+   custom memory managers. This pointer is passed to SLJIT_MALLOC
+   and SLJIT_FREE macros. Most allocators (including the default
+   one) ignores this value, and it is recommended to pass NULL
+   as a dummy value for allocator_data.
 
-/* Free everything except the compiled machine code. */
+   Returns NULL if failed. */
+SLJIT_API_FUNC_ATTRIBUTE struct sljit_compiler* sljit_create_compiler(void *allocator_data);
+
+/* Frees everything except the compiled machine code. */
 SLJIT_API_FUNC_ATTRIBUTE void sljit_free_compiler(struct sljit_compiler *compiler);
 
 /* Returns the current error code. If an error is occurred, future sljit
@@ -422,6 +428,14 @@ SLJIT_API_FUNC_ATTRIBUTE void sljit_free_compiler(struct sljit_compiler *compile
    call, it is enough to do it before the code is compiled. Removing
    these checks increases the performance of the compiling process. */
 static SLJIT_INLINE sljit_si sljit_get_compiler_error(struct sljit_compiler *compiler) { return compiler->error; }
+
+/* Sets the compiler error code to SLJIT_ERR_ALLOC_FAILED except
+   if an error was detected before. After the error code is set
+   the compiler behaves as if the allocation failure happened
+   during an sljit function call. This can greatly simplify error
+   checking, since only the compiler status needs to be checked
+   after the compilation. */
+SLJIT_API_FUNC_ATTRIBUTE void sljit_set_compiler_memory_error(struct sljit_compiler *compiler);
 
 /*
    Allocate a small amount of memory. The size must be <= 64 bytes on 32 bit,
@@ -673,7 +687,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_emit_fast_return(struct sljit_compiler *
 #define SLJIT_OP0_BASE			0
 
 /* Flags: - (never set any flags)
-   Note: breakpoint instruction is not supported by all architectures (namely ppc)
+   Note: breakpoint instruction is not supported by all architectures (e.g. ppc)
          It falls back to SLJIT_NOP in those cases. */
 #define SLJIT_BREAKPOINT		(SLJIT_OP0_BASE + 0)
 /* Flags: - (never set any flags)
@@ -682,24 +696,42 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_emit_fast_return(struct sljit_compiler *
 #define SLJIT_NOP			(SLJIT_OP0_BASE + 1)
 /* Flags: - (may destroy flags)
    Unsigned multiplication of SLJIT_R0 and SLJIT_R1.
-   Result goes to SLJIT_R1:SLJIT_R0 (high:low) word */
+   Result is placed into SLJIT_R1:SLJIT_R0 (high:low) word */
 #define SLJIT_LUMUL			(SLJIT_OP0_BASE + 2)
 /* Flags: - (may destroy flags)
    Signed multiplication of SLJIT_R0 and SLJIT_R1.
-   Result goes to SLJIT_R1:SLJIT_R0 (high:low) word */
+   Result is placed into SLJIT_R1:SLJIT_R0 (high:low) word */
 #define SLJIT_LSMUL			(SLJIT_OP0_BASE + 3)
 /* Flags: I - (may destroy flags)
    Unsigned divide of the value in SLJIT_R0 by the value in SLJIT_R1.
-   The result is placed in SLJIT_R0 and the remainder goes to SLJIT_R1.
-   Note: if SLJIT_R1 contains 0, the behaviour is undefined. */
-#define SLJIT_LUDIV			(SLJIT_OP0_BASE + 4)
-#define SLJIT_ILUDIV			(SLJIT_LUDIV | SLJIT_INT_OP)
+   The result is placed into SLJIT_R0 and the remainder into SLJIT_R1.
+   Note: if SLJIT_R1 is 0, the behaviour is undefined. */
+#define SLJIT_UDIVMOD			(SLJIT_OP0_BASE + 4)
+#define SLJIT_IUDIVMOD			(SLJIT_UDIVMOD | SLJIT_INT_OP)
 /* Flags: I - (may destroy flags)
    Signed divide of the value in SLJIT_R0 by the value in SLJIT_R1.
-   The result is placed in SLJIT_R0 and the remainder goes to SLJIT_R1.
-   Note: if SLJIT_R1 contains 0, the behaviour is undefined. */
-#define SLJIT_LSDIV			(SLJIT_OP0_BASE + 5)
-#define SLJIT_ILSDIV			(SLJIT_LSDIV | SLJIT_INT_OP)
+   The result is placed into SLJIT_R0 and the remainder into SLJIT_R1.
+   Note: if SLJIT_R1 is 0, the behaviour is undefined.
+   Note: if SLJIT_R1 is -1 and SLJIT_R0 is integer min (0x800..00),
+         the behaviour is undefined. */
+#define SLJIT_SDIVMOD			(SLJIT_OP0_BASE + 5)
+#define SLJIT_ISDIVMOD			(SLJIT_SDIVMOD | SLJIT_INT_OP)
+/* Flags: I - (may destroy flags)
+   Unsigned divide of the value in SLJIT_R0 by the value in SLJIT_R1.
+   The result is placed into SLJIT_R0. SLJIT_R1 preserves its value.
+   Note: if SLJIT_R1 is 0, the behaviour is undefined.
+   Note: SLJIT_SDIV is single precision divide. */
+#define SLJIT_UDIVI			(SLJIT_OP0_BASE + 6)
+#define SLJIT_IUDIVI			(SLJIT_UDIVI | SLJIT_INT_OP)
+/* Flags: I - (may destroy flags)
+   Signed divide of the value in SLJIT_R0 by the value in SLJIT_R1.
+   The result is placed into SLJIT_R0. SLJIT_R1 preserves its value.
+   Note: if SLJIT_R1 is 0, the behaviour is undefined.
+   Note: if SLJIT_R1 is -1 and SLJIT_R0 is integer min (0x800..00),
+         the behaviour is undefined.
+   Note: SLJIT_SDIV is single precision divide. */
+#define SLJIT_SDIVI			(SLJIT_OP0_BASE + 7)
+#define SLJIT_ISDIVI			(SLJIT_SDIVI | SLJIT_INT_OP)
 
 SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_emit_op0(struct sljit_compiler *compiler, sljit_si op);
 
@@ -836,34 +868,6 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_emit_op2(struct sljit_compiler *compiler
 	sljit_si dst, sljit_sw dstw,
 	sljit_si src1, sljit_sw src1w,
 	sljit_si src2, sljit_sw src2w);
-
-/* The following function is a helper function for sljit_emit_op_custom.
-   It returns with the real machine register index ( >=0 ) of any SLJIT_R,
-   SLJIT_S and SLJIT_SP registers.
-
-   Note: it returns with -1 for virtual registers (only on x86-32). */
-
-SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_get_register_index(sljit_si reg);
-
-/* The following function is a helper function for sljit_emit_op_custom.
-   It returns with the real machine register index of any SLJIT_FLOAT register.
-
-   Note: the index is always an even number on ARM (except ARM-64), MIPS, and SPARC. */
-
-SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_get_float_register_index(sljit_si reg);
-
-/* Any instruction can be inserted into the instruction stream by
-   sljit_emit_op_custom. It has a similar purpose as inline assembly.
-   The size parameter must match to the instruction size of the target
-   architecture:
-
-         x86: 0 < size <= 15. The instruction argument can be byte aligned.
-      Thumb2: if size == 2, the instruction argument must be 2 byte aligned.
-              if size == 4, the instruction argument must be 4 byte aligned.
-   Otherwise: size must be 4 and instruction argument must be 4 byte aligned. */
-
-SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_emit_op_custom(struct sljit_compiler *compiler,
-	void *instruction, sljit_si size);
 
 /* Returns with non-zero if fpu is available. */
 
@@ -1095,7 +1099,7 @@ SLJIT_API_FUNC_ATTRIBUTE void sljit_set_const(sljit_uw addr, sljit_sw new_consta
 /* --------------------------------------------------------------------- */
 
 #define SLJIT_MAJOR_VERSION	0
-#define SLJIT_MINOR_VERSION	92
+#define SLJIT_MINOR_VERSION	93
 
 /* Get the human readable name of the platform. Can be useful on platforms
    like ARM, where ARM and Thumb2 functions can be mixed, and
@@ -1141,10 +1145,11 @@ struct sljit_stack {
 };
 
 /* Returns NULL if unsuccessful.
-   Note: limit and max_limit contains the size for stack allocation
-   Note: the top field is initialized to base. */
-SLJIT_API_FUNC_ATTRIBUTE struct sljit_stack* SLJIT_CALL sljit_allocate_stack(sljit_uw limit, sljit_uw max_limit);
-SLJIT_API_FUNC_ATTRIBUTE void SLJIT_CALL sljit_free_stack(struct sljit_stack* stack);
+   Note: limit and max_limit contains the size for stack allocation.
+   Note: the top field is initialized to base.
+   Note: see sljit_create_compiler for the explanation of allocator_data. */
+SLJIT_API_FUNC_ATTRIBUTE struct sljit_stack* SLJIT_CALL sljit_allocate_stack(sljit_uw limit, sljit_uw max_limit, void *allocator_data);
+SLJIT_API_FUNC_ATTRIBUTE void SLJIT_CALL sljit_free_stack(struct sljit_stack *stack, void *allocator_data);
 
 /* Can be used to increase (allocate) or decrease (free) the memory area.
    Returns with a non-zero value if unsuccessful. If new_limit is greater than
@@ -1152,7 +1157,7 @@ SLJIT_API_FUNC_ATTRIBUTE void SLJIT_CALL sljit_free_stack(struct sljit_stack* st
    since the growth ratio can be added to the current limit, and sljit_stack_resize
    will do all the necessary checks. The fields of the stack are not changed if
    sljit_stack_resize fails. */
-SLJIT_API_FUNC_ATTRIBUTE sljit_sw SLJIT_CALL sljit_stack_resize(struct sljit_stack* stack, sljit_uw new_limit);
+SLJIT_API_FUNC_ATTRIBUTE sljit_sw SLJIT_CALL sljit_stack_resize(struct sljit_stack *stack, sljit_uw new_limit);
 
 #endif /* (defined SLJIT_UTIL_STACK && SLJIT_UTIL_STACK) */
 
@@ -1180,5 +1185,65 @@ struct sljit_function_context {
 SLJIT_API_FUNC_ATTRIBUTE void sljit_set_function_context(void** func_ptr, struct sljit_function_context* context, sljit_sw addr, void* func);
 
 #endif /* !(defined SLJIT_INDIRECT_CALL && SLJIT_INDIRECT_CALL) */
+
+/* --------------------------------------------------------------------- */
+/*  CPU specific functions                                               */
+/* --------------------------------------------------------------------- */
+
+/* The following function is a helper function for sljit_emit_op_custom.
+   It returns with the real machine register index ( >=0 ) of any SLJIT_R,
+   SLJIT_S and SLJIT_SP registers.
+
+   Note: it returns with -1 for virtual registers (only on x86-32). */
+
+SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_get_register_index(sljit_si reg);
+
+/* The following function is a helper function for sljit_emit_op_custom.
+   It returns with the real machine register index of any SLJIT_FLOAT register.
+
+   Note: the index is always an even number on ARM (except ARM-64), MIPS, and SPARC. */
+
+SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_get_float_register_index(sljit_si reg);
+
+/* Any instruction can be inserted into the instruction stream by
+   sljit_emit_op_custom. It has a similar purpose as inline assembly.
+   The size parameter must match to the instruction size of the target
+   architecture:
+
+         x86: 0 < size <= 15. The instruction argument can be byte aligned.
+      Thumb2: if size == 2, the instruction argument must be 2 byte aligned.
+              if size == 4, the instruction argument must be 4 byte aligned.
+   Otherwise: size must be 4 and instruction argument must be 4 byte aligned. */
+
+SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_emit_op_custom(struct sljit_compiler *compiler,
+	void *instruction, sljit_si size);
+
+#if (defined SLJIT_CONFIG_X86 && SLJIT_CONFIG_X86)
+
+/* Returns with non-zero if sse2 is available. */
+
+SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_x86_is_sse2_available(void);
+
+/* Returns with non-zero if cmov instruction is available. */
+
+SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_x86_is_cmov_available(void);
+
+/* Emit a conditional mov instruction on x86 CPUs. This instruction
+   moves src to destination, if the condition is satisfied. Unlike
+   other arithmetic instructions, destination must be a register.
+   Before such instructions are emitted, cmov support should be
+   checked by sljit_x86_is_cmov_available function.
+    type must be between SLJIT_EQUAL and SLJIT_S_ORDERED
+    dst_reg must be a valid register and it can be combined
+      with SLJIT_INT_OP to perform 32 bit arithmetic
+   Flags: I - (never set any flags)
+ */
+
+SLJIT_API_FUNC_ATTRIBUTE sljit_si sljit_x86_emit_cmov(struct sljit_compiler *compiler,
+	sljit_si type,
+	sljit_si dst_reg,
+	sljit_si src, sljit_sw srcw);
+
+#endif
 
 #endif /* _SLJIT_LIR_H_ */

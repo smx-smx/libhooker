@@ -15,69 +15,12 @@ solution "libhooker"
 	
 	language "C"
 	includedirs { "include" }
-	
-	files { "src/common/*.c" }
-	
+	includeexternal("sljit.lua");
+
 	targetdir "bin"
 	targetprefix("")
-	
-	include("cross.lua")
-	toolset "cross_gcc"
 
-	filter "configurations:auto"
-		defines { "SLJIT_CONFIG_AUTO" }
-		links { "capstone" }
 
-	filter "configurations:i386"
-		defines { "SLJIT_CONFIG_X86_32" }
-		architecture "x86"
-		links { "capstone" }
-		files {
-			"src/interface/cpu/intel/common_intel.c",
-			"src/interface/cpu/intel/cpu_i386.c",
-		}
-	
-	filter "configurations:x86_64"
-		defines { "SLJIT_CONFIG_X86_64" }
-		architecture "x86_64"
-		links { "capstone" }
-		files {
-			"src/interface/cpu/intel/common_intel.c",
-			"src/interface/cpu/intel/cpu_x86_64.c",
-		}
-
-	filter "configurations:armv5"
-		defines { "SLJIT_CONFIG_ARM_V5" }
-		files { "src/interface/cpu/arm/cpu_arm.c" }
-
-	filter "configurations:armv7"
-		defines { "SLJIT_CONFIG_ARM_V7" }
-		files { "src/interface/cpu/arm/cpu_arm.c" }
-
-	filter "configurations:armthumb2"
-		defines { "SLJIT_CONFIG_ARM_THUMB2" }
-
-	filter "configurations:arm64"
-		defines { "SLJIT_CONFIG_ARM_64" }
-
-	filter "configurations:ppc32"
-		defines { "SLJIT_CONFIG_PPC_32" }
-
-	filter "configurations:ppc64"
-		defines { "SLJIT_CONFIG_PPC_64" }
-
-	filter "configurations:mips32"
-		defines { "SLJIT_CONFIG_MIPS_32" }
-
-	filter "configurations:mips64"
-		defines { "SLJIT_CONFIG_MIPS_64" }
-
-	filter "configurations:sparc32"
-		defines { "SLJIT_CONFIG_SPARC_32" }
-
-	filter "configurations:tilegx"
-		defines { "SLJIT_CONFIG_TILEGX" }
-	
 	filter "platforms:linux"
 		system "linux"
 		defines { "_GNU_SOURCE" }
@@ -85,25 +28,62 @@ solution "libhooker"
 			"-fPIC", "-Wall"
 		}
 
+	
+	include("cross.lua")
+	toolset "cross_gcc"
+
+	filter "configurations:i386"
+		architecture "x86"
+		libdirs { "/usr/lib32/**" }
+
+	filter "configurations:x86_64"
+		architecture "x86_64"
+
+
+	project "lh_common"
+		kind "StaticLib"
+
+		files {
+			"src/common/*.c",
+			"src/interface/cpu/sljit/sljitLir.c"
+		}
+
+
 	project "needle"
 		kind "ConsoleApp"
+		links { "lh_common" }
+
 		files {
 			"src/interface/cpu/cpu_common.c",
 			"src/needle/*.c"
 		}
 
-		includedirs { "include/sljit" }
-		
-		files {
-			"src/interface/cpu/sljit/sljitLir.c",
-		}
+		filter "configurations:i386"
+			links { "capstone" }
+			files {
+				"src/interface/cpu/intel/common_intel.c",
+				"src/interface/cpu/intel/cpu_i386.c",
+			}
+
+		filter "configurations:x86_64"
+			links { "capstone" }
+			files {
+				"src/interface/cpu/intel/common_intel.c",
+				"src/interface/cpu/intel/cpu_x86_64.c",
+			}
+
+		filter "configurations:armv5"
+			files { "src/interface/cpu/arm/cpu_arm.c" }
+
+		filter "configurations:armv7"
+			files { "src/interface/cpu/arm/cpu_arm.c" }
 
 		filter "platforms:linux"
 			files {
 				"src/interface/inject/linux/*.c",
 				"src/interface/exe/elf/*.c"
 			}
-		
+
 	project "testapp"
 		kind "ConsoleApp"
 		files {
@@ -121,6 +101,4 @@ solution "libhooker"
 			files { "modules/sample/*.c" }
 			links { "lh_common", "lh_basemod" }
 
-		if os.isfile("modules.lua") then
-			include("modules.lua");
-		end
+		dofileopt("modules.lua");
