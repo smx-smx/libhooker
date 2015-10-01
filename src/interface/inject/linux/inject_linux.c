@@ -628,7 +628,7 @@ uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function
 	return re;
 }
 
-int inj_ptrcpy(lh_session_t *lh, struct user *iregs, uintptr_t dstaddr, uintptr_t srcaddr){
+int inj_ptrcpy(lh_session_t *lh, uintptr_t dstaddr, uintptr_t srcaddr){
 	return inj_copydata(lh->proc.pid, dstaddr, (uint8_t *)&(srcaddr), sizeof(uintptr_t));
 }
 
@@ -649,7 +649,7 @@ uint8_t *inj_build_jump(uintptr_t addr, size_t *jumpSz){
 	void *sljit_code = NULL;
 	struct sljit_compiler *compiler = NULL;
 
-	compiler = sljit_create_compiler();
+	compiler = sljit_create_compiler(NULL);
 	if(!compiler){
 		LH_ERROR("Unable to create sljit compiler instance");
 		return NULL;
@@ -673,58 +673,125 @@ uint8_t *inj_build_jump(uintptr_t addr, size_t *jumpSz){
 	return (uint8_t *)sljit_code;
 }
 
-int inj_build_payload(uintptr_t hook_addr, uintptr_t source_addr, uintptr_t r_trampoline_addr,
-	uint8_t *payload_out, size_t *payload_size, size_t *replacement_size)
+int inj_get_jump_size(uintptr_t addr){
+	size_t jumpSz;
+	uint8_t *jump;
+	if(!(jump = inj_build_jump(addr, &jumpSz)))
+		return -1;
+	return jumpSz;
+}
+
+int inj_build_payload(
+	pid_t r_pid,
+	lh_fn_hook_t *fnh,
+	struct ld_procmaps *lib_to_hook,
+	uintptr_t symboladdr
+)
 {
+	int result = -1;
 
-	size_t payload_codeSz = 0, jumpSz=0;
+	// Read remote code (max LHM_FN_COPY_BYTES bytes)
+	uint8_t *remote_code = inj_blowdata(r_pid, symboladdr, LHM_FN_COPY_BYTES);
+	if(remote_code == NULL){
+		LH_PRINT("ERROR: Can't read code at 0x"LX, symboladdr);
+		return -1;
+	}
 
-	uint8_t *ocode = NULL, *replacement = NULL;
-
-	// JUMP back to original code (skip the original bytes that have been replaced to avoid loop)	
-	if(!(ocode = inj_build_jump(source_addr, &jumpSz)))
+	size_t jumpSz;
+	// Calculate the JUMP from Original to Replacement, so we can get the minimum size to save
+	// We need this to avoid opcode overlapping (especially on Intel, where we can have variable opcode size)
+	uint8_t *replacement_jump;	//original -> custom
+	if(!(replacement_jump = inj_build_jump(fnh->hook_fn, &jumpSz)))
 		return -1;
 
-	if(payload_out){
-		memcpy(payload_out + payload_codeSz, ocode, jumpSz);
-		sljit_free_code(ocode);
+	int num_opcode_bytes;
+	if(fnh->opcode_bytes_to_restore > 0){
+		// User specified bytes to save manually
+		num_opcode_bytes = fnh->opcode_bytes_to_restore;
+	} else {
+		// Calculate amount of bytes to save (important for Intel, variable opcode size)
+		num_opcode_bytes = inj_getbackup_size(remote_code, LHM_FN_COPY_BYTES, jumpSz);
 	}
 
-	payload_codeSz += jumpSz;
+	if(num_opcode_bytes < 0){
+		LH_ERROR("Cannot determine number of opcode bytes to save");
+		LH_PRINT("Code size of %d bytes (LHM_NF_COPY_BYTES) may be too small", LHM_FN_COPY_BYTES);
+		num_opcode_bytes = LHM_FN_COPY_BYTES;
+	}
+	LH_PRINT("Opcode bytes to save: %d", num_opcode_bytes);
 
-	if(payload_size)
-		*payload_size = payload_codeSz;
+	// Make sure code doesn't contain any PC-relative operation once moved to the new location
+	inj_relocate_code(remote_code, num_opcode_bytes, symboladdr, lib_to_hook->mmap);
 
-	#ifdef LH_JUMP_ABS
-	//JUMP from symboladdr to hook directly
-	replacement = inj_build_jump(hook_addr, &jumpSz);
-	#else
-	r_trampoline_addr += jumpSz;
-	uint8_t *trampoline = NULL;
-	// Call the replacement function from trampoline with an absolute jump (ABSJMP)
-	if(!(trampoline = inj_build_jump(hook_addr, &jumpSz)))
+	//LH_PRINT("Copying %d original bytes to 0x"LX"", num_opcode_bytes, lib_to_hook->mmap);
+
+	uint8_t *jump_back;			//custom -> original
+	// JUMP from Replacement back to Original code (skip the original bytes that have been replaced to avoid loop)	
+	if(!(jump_back = inj_build_jump(symboladdr + num_opcode_bytes, &jumpSz)))
 		return -1;
-	if(payload_out){
-		memcpy(payload_out + payload_codeSz, trampoline, jumpSz);
-		sljit_free_code(trampoline);
-	}
-	payload_codeSz += jumpSz;
-	if(payload_size)
-		*payload_size = payload_codeSz;
-	//JUMP from symboladdr to TRAMPOLINE (r_trampoline_addr)
-	replacement = inj_build_jump(r_trampoline_addr, &jumpSz);
-	#endif
-
-	if(payload_out){
-		memcpy(payload_out + payload_codeSz, replacement, jumpSz);
-		sljit_free_code(replacement);
+	
+	// Allocate space for the payload (code size + jump back)
+	size_t payloadSz = num_opcode_bytes + jumpSz;
+	remote_code = realloc(remote_code, payloadSz);
+	if (!remote_code) {
+		LH_ERROR_SE("realloc");
+		if(remote_code)
+			free(remote_code);
+		return -1;
 	}
 
-	payload_codeSz += jumpSz;
-	if(replacement_size)
-		*replacement_size = jumpSz;
+	memcpy(remote_code + num_opcode_bytes, jump_back, jumpSz);
+	sljit_free_code(jump_back);
 
-	return LH_SUCCESS;
+	//Write the payload to the process
+	if (LH_SUCCESS != inj_copydata(r_pid, lib_to_hook->mmap, remote_code, payloadSz)) {
+		LH_ERROR("Failed to copy payload bytes");
+		goto end;
+	}
+
+	//Write the replacement jump to the process
+	if (LH_SUCCESS != inj_copydata(r_pid, symboladdr, replacement_jump, jumpSz)) {
+		LH_ERROR("Failed to copy replacement bytes");
+		goto end;
+	}
+	sljit_free_code(replacement_jump);
+
+	/*if (lh_verbose > 3) {
+		LH_VERBOSE(4, "Dumping the overwritten original function");
+		lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", symboladdr, 0x10);
+		if(errno)
+			break;
+
+		LH_VERBOSE(4, "Dumping the corresponding payload area");
+		lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", remote_code, payloadSz);
+		if(errno)
+			break;
+	}*/
+
+
+	// Check we have enough room
+	if (lib_to_hook->mmap + payloadSz > lib_to_hook->mmap_end) {
+		LH_ERROR("Not enough memory!");
+		result = -1;
+		goto end;
+	}
+
+
+	// Copy payload to tracked program
+	if (LH_SUCCESS != inj_copydata(r_pid, lib_to_hook->mmap, remote_code, payloadSz)) {
+		LH_ERROR("Unable to copy payload");
+		goto end;
+	}
+
+	LH_PRINT("Payload Built! 0x"LX" -> 0x"LX" -> 0x"LX" -> 0x"LX"",
+		symboladdr, fnh->hook_fn, lib_to_hook->mmap, symboladdr + num_opcode_bytes);
+
+	result = LH_SUCCESS;
+
+	end:
+		if(remote_code)
+			free(remote_code);
+		return result;
 }
 
 /*
@@ -755,6 +822,7 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 			lib_to_hook->mmap = returned;
 			lib_to_hook->mmap_begin = lib_to_hook->mmap;
 			lib_to_hook->mmap_end = lib_to_hook->mmap_begin + MMAP_SIZE;
+			LH_VERBOSE(2, "MMAP Address: 0x"LX"", returned);
 			return;
 		}
 		// Free the memory mapped by the OS
@@ -891,7 +959,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 			if((r_str = inj_strcpy_alloc(lh, &iregs, lh->proc.argv[i])) == 0)
 				break;
 			r_allocs[r_alloc++] = r_str;
-			if(inj_ptrcpy(lh, &iregs, r_procmem + strBlkOff, r_str) != LH_SUCCESS){
+			if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS){
 				break;
 			}
 		}
@@ -909,7 +977,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 			if((r_str = inj_strcpy_alloc(lh, &iregs, lh->proc.prog_argv[i])) == 0)
 				break;
 			r_allocs[r_alloc++] = r_str;
-			if(inj_ptrcpy(lh, &iregs, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
+			if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
 				break;
 		}
 
@@ -917,7 +985,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 			break;
 		r_allocs[r_alloc++] = r_str;
 		rproc->exename = (char *)(r_str);
-		if(inj_ptrcpy(lh, &iregs, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
+		if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
 			break;
 
 
@@ -1164,126 +1232,26 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				*/
 
 				// Position of payload in target address space 
-				uintptr_t r_payload_start = lib_to_hook->mmap;
 				if (lib_to_hook->mmap + LHM_FN_COPY_BYTES > lib_to_hook->mmap_end) {
 					LH_PRINT("ERROR: not enough memory for hook_settings->fn_hooks[%d]", fni);
 					break;
 				}
 
-				size_t payload_codeSz = 0, replacement_codeSz = 0;
-				uintptr_t r_ocode_addr = lib_to_hook->mmap;
-
-				//get payload size first
-				if(inj_build_payload(fnh->hook_fn, symboladdr, r_ocode_addr, NULL, &payload_codeSz, &replacement_codeSz) < 0){
-					LH_ERROR("Cannot build payload!");
-					break;
-				}
-				LH_PRINT("Payload     Code Size: %d", payload_codeSz);
-				LH_PRINT("Replacement Code Size: %d", replacement_codeSz);
-
-
-				// Check that the user provided enough bytes to replace in the hook settings
-				uint8_t *rcode = inj_blowdata(lh->proc.pid, symboladdr, LHM_FN_COPY_BYTES);
-				if(rcode == NULL){
-					LH_PRINT("ERROR: Can't read code at 0x"LX, symboladdr);
-					break;
-				}
-				
-				int num_opcode_bytes;
-				if(fnh->opcode_bytes_to_restore > 0){
-					num_opcode_bytes = fnh->opcode_bytes_to_restore;
-				} else {
-					num_opcode_bytes = inj_getbackup_size(rcode, LHM_FN_COPY_BYTES, replacement_codeSz);
-				}
-					
-				if(num_opcode_bytes < 0){
-					LH_ERROR("Cannot determine number of opcode bytes to save");
-					LH_PRINT("Code size of %d may be too small", LHM_FN_COPY_BYTES);
-					num_opcode_bytes = LHM_FN_COPY_BYTES;
-				}
-				free(rcode);
-				LH_PRINT("Opcode bytes to save: %d", num_opcode_bytes);
-
-				// Backup original code to mmapped area (OCODE)
-				LH_PRINT("Copying %d original bytes", num_opcode_bytes);
-				//Read the code from the process
-				uint8_t *origCode = inj_blowdata(lh->proc.pid, symboladdr, num_opcode_bytes);
-
-				//Check that the code doesn't contain PC-related operations)
-				inj_relocate_code(origCode, num_opcode_bytes, symboladdr, lib_to_hook->mmap);
-
-				//And write it back in another location
-				if (LH_SUCCESS != inj_copydata(lh->proc.pid, lib_to_hook->mmap, origCode, num_opcode_bytes)) {
-					LH_ERROR("Failed to copy original bytes");
-					goto error;
-				}
-				free(origCode);
-
-				//We just added original code to the memory map
-				lib_to_hook->mmap += num_opcode_bytes;
-				uintptr_t r_new_payload_address = lib_to_hook->mmap;
-
-				// Allocate space for the payload
-				uint8_t *l_new_payload = (uint8_t *)calloc(1, payload_codeSz + replacement_codeSz);
-				if (!l_new_payload) {
-					LH_ERROR_SE("malloc");
-					goto error;
-				}
-
 				//Build the actual payload
-				//We update the sizes, in the event they changed
-				if(inj_build_payload(fnh->hook_fn,
-						symboladdr + num_opcode_bytes,
-						lib_to_hook->mmap,
-						l_new_payload, &payload_codeSz, &replacement_codeSz) < 0
+				if(inj_build_payload(
+						lh->proc.pid,	
+						fnh,
+						lib_to_hook,
+						symboladdr) < 0
 				){
 					LH_ERROR("Cannot build payload!");
 					break;
 				}
-
-				// Check we have enough room
-				if (lib_to_hook->mmap > lib_to_hook->mmap_end) {
-					LH_ERROR("Not enough memory!");
-					goto error;
-				}
-
-
-				// Copy payload to tracked program
-				if (LH_SUCCESS != inj_copydata(lh->proc.pid, r_new_payload_address, l_new_payload, payload_codeSz)) {
-					LH_ERROR("Unable to copy payload");
-					goto error;
-				}
-
-				//Now payload is ready, move onto the original function
-
-				LH_VERBOSE(4, "------------------------------------- replacing first opcodes for %s/%s begin:", fnh->libname, fnh->symname);
-				// Copy the jump to trampoline/code in place of the original function
-				if (LH_SUCCESS != inj_copydata(lh->proc.pid, symboladdr, l_new_payload + payload_codeSz, payload_codeSz)) {
-					LH_ERROR("Unable to copy back relative/absolute jump into the original function");
-					goto error;
-				}
-
-				LH_VERBOSE(4, "------------------------------------- replacing first opcodes for %s/%s end", fnh->libname, fnh->symname);
-
-				if (lh_verbose > 3) {
-					LH_VERBOSE(4, "Dumping the overwritten original function");
-					lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", symboladdr, 0x10);
-					if(errno)
-						break;
-
-					LH_VERBOSE(4, "Dumping the corresponding payload area");
-					lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", r_payload_start, payload_codeSz);
-					if(errno)
-						break;
-				}
-				
-				if(l_new_payload)
-						free(l_new_payload);
 						
 				after_hook:
 					// We store the original function address, if wanted
 					if (fnh->orig_function_ptr != 0) {
-						uintptr_t func_addr = (do_hook) ? r_ocode_addr : symboladdr;
+						uintptr_t func_addr = (do_hook) ? lib_to_hook->mmap : symboladdr;
 						if (LH_SUCCESS != inj_pokedata(lh->proc.pid, fnh->orig_function_ptr, func_addr)) {
 							LH_ERROR("Failed to copy original bytes");
 							goto error;
@@ -1306,8 +1274,6 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 						if(errno)
 							break;
 					}
-					if(l_new_payload)
-						free(l_new_payload);
 					break;
 				
 			}

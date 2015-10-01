@@ -24,6 +24,8 @@ struct user {
 #include "interface/cpu/cpu_intel.h"
 #endif
 
+#include <capstone/capstone.h>
+
 /* 
  * Common Functions
  */

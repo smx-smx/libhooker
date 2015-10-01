@@ -20,9 +20,12 @@ int inj_build_trap(uint8_t *buffer){
 }
 */
 
+
+/*
 int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes){
 	return sz / inj_opcode_bytes();
 }
+*/
 
 inline void lh_rset_lr(struct user *r, uintptr_t value) {
 	r->regs.uregs[14] = value;
