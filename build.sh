@@ -27,7 +27,6 @@ gen_cmd=""
 build_cmd=""
 color_cmd=""
 
-CONF_ARCH=""
 CONF_OS=""
 
 function _pushd(){
@@ -225,28 +224,30 @@ case "$1" in
 		;;
 esac
 
-case $MACH in 
-	x86_64*)
-		ok "x86_64 detected"
-		CONF_ARCH="x86_64"
-		;;
-	i386*)
-		ok "i386 detected"
-		CONF_ARCH="i386"
-		;;
-	armv5*)
-		ok "arm v5 detected"
-		CONF_ARCH="armv5"
-		;;
-	armv7*)
-		ok "arm v7 detected"
-		CONF_ARCH="armv7"
-		;;
-	*)
-		warn "Couldn't detect machine, trying AUTO detection..."
-		CONF_ARCH="auto"
-		;;
-esac
+if [ -z $CONF_ARCH ]; then
+	case $MACH in 
+		x86_64*)
+			ok "x86_64 detected"
+			CONF_ARCH="x86_64"
+			;;
+		i386*)
+			ok "i386 detected"
+			CONF_ARCH="i386"
+			;;
+		armv5*)
+			ok "arm v5 detected"
+			CONF_ARCH="armv5"
+			;;
+		armv7*)
+			ok "arm v7 detected"
+			CONF_ARCH="auto"
+			;;
+		*)
+			warn "Couldn't detect machine, trying AUTO 	detection..."
+			CONF_ARCH="auto"
+			;;
+	esac
+fi
 
 progress "Generating build files..."
 CROSS_COMPILE=$CROSS_COMPILE verbose "premake5 $gen_cmd" | premake_parser
