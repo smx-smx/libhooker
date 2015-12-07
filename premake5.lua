@@ -1,3 +1,15 @@
+function lh_basemod()
+	links { "lh_common", "lh_basemod" }
+end
+
+function lh_extmod()
+	links { "lh_common", "lh_basemod", "lh_extmod" }
+end
+
+function lh_lgmod()
+	links { "lh_common", "lh_basemod", "lh_lgmod" }
+end
+
 solution "libhooker"
 	configurations {
 		"x86_64", "i386",
@@ -8,7 +20,7 @@ solution "libhooker"
 		"sparc32",
 		"auto"
 	}
-	
+
 	flags { "Symbols" }
 
 	platforms { "linux" }
@@ -28,7 +40,7 @@ solution "libhooker"
 			"-fPIC", "-Wall"
 		}
 
-	
+
 	include("cross.lua")
 	toolset "cross_gcc"
 
@@ -39,19 +51,38 @@ solution "libhooker"
 	filter "configurations:x86_64"
 		architecture "x86_64"
 
-
 	project "lh_common"
 		kind "StaticLib"
-
 		files {
-			"src/common/*.c",
-			"src/interface/cpu/sljit/sljitLir.c"
+			"src/common/lh_common.c"
 		}
+
+	group "Helpers"
+		project "lh_basemod"
+			kind "StaticLib"
+			links { "lh_common" }
+			files { "src/helpers/base/*.c" }
+
+		project "lh_extmod"
+			kind "StaticLib"
+			links { "lh_common" }
+			files {
+				"src/helpers/ext/*.c",
+				"src/interface/cpu/sljit/sljitLir.c"
+			}
+
+		project "lh_lgmod"
+			kind "StaticLib"
+			links { "lh_common" }
+			files {
+				"src/helpers/lg/*.c"
+			}
+
 
 
 	project "needle"
 		kind "ConsoleApp"
-		links { "lh_common" }
+		links { "lh_common", "lh_extmod" }
 
 		files {
 			"src/interface/cpu/cpu_common.c",
@@ -91,14 +122,9 @@ solution "libhooker"
 		}
 
 	group "Modules"
-		project "lh_basemod"
-			kind "StaticLib"
-			links { "lh_common" }
-			files { "src/basemod/*.c" }
-
 		project "lhm_sample"
 			kind "SharedLib"
 			files { "modules/sample/*.c" }
-			links { "lh_common", "lh_basemod" }
+			lh_basemod()
 
 		dofileopt("modules.lua");

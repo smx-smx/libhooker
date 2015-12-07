@@ -36,7 +36,7 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 	cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
 
 	size_t i, j;
-	
+
 	count = cs_disasm(handle, codePtr, codeSz, sourcePC, 0, &insns);
 	if(count < 0)
 		goto err_disasm;
@@ -57,7 +57,7 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 			goto ret;
 		}
 
-		
+
 		for(j=0; j<detail->x86.op_count; j++){
 			cs_x86_op *op = &(detail->x86.operands[j]);
 			switch(op->type) {
@@ -75,11 +75,13 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 						if(!strcmp(reg_name, (char *)&pcRegName)){
 							if(!strcmp(insn->mnemonic, "cmp")){
 								uint displacement = (sourcePC + insn->size) - destPC;
-								if(lh_verbose > 3)
+								if(lh_verbose >= 3){
+									LH_VERBOSE(3, ">> New Displacement: "LX"", displacement);
 									lh_hexdump("instruction before", insn->bytes, insn->size);
+								}
 								printf(">> Relocating RELATIVE CMP MEM ACCESS...\n");
-								*(uint *)(codePtr + curPos + 2) = displacement & 0xFFFF;
-								if(lh_verbose > 3){
+								*(uint *)(codePtr + curPos + 3) = displacement & 0xFFFFFFFFFF;
+								if(lh_verbose >= 3){
 									lh_hexdump("instruction after", codePtr + curPos, insn->size);
 								}
 							}
