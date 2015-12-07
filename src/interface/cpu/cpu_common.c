@@ -45,18 +45,16 @@ int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz){
 			i += opSz;
 		return i;
 	} else { //dynamic opcode size
-		int valid = 0; //total number of valid opcode bytes
-		for(i=0; i<codeSz;){
-			//disassemble a byte at a time
-			int _valid = 0; //numer of valid opcode bytes
-			if(inj_getinsn_count(codePtr + i, codeSz - i, &_valid) < 0)
-				return -1;
-			LH_VERBOSE(3, "VALID %2d READ %2d REQUIRED %2d", valid, i+1, payloadSz);
-			if(valid >= payloadSz)
-				return valid;
-			valid += _valid;
-			i += (_valid > 0) ? _valid : 1;
+		int totalBytes = 0;
+		int total_insn = inj_getinsn_count(codePtr, payloadSz, &totalBytes);
+		if(total_insn <= 0 || totalBytes == 0)
+			return -1;
+		int _payloadSz = payloadSz;
+		while(totalBytes < payloadSz){
+			inj_getinsn_count(codePtr, ++_payloadSz, &totalBytes);
+			LH_PRINT("VALID: %d  REQUIRED: %d", totalBytes, payloadSz);
 		}
+		return totalBytes;
 	}
 	return -1;
 }
