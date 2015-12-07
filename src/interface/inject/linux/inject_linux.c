@@ -13,9 +13,6 @@
 //debug
 #include <time.h>
 
-//sljit
-#include <sljit/sljitLir.h>
-
 //everything we need to work on linux
 #include "interface/inject/inject_linux.h"
 #include "lh_module.h"
@@ -645,42 +642,6 @@ int inj_pokedata(pid_t pid, uintptr_t destaddr, uintptr_t data) {
 	return LH_SUCCESS;
 }
 
-uint8_t *inj_build_jump(uintptr_t addr, size_t *jumpSz){
-	void *sljit_code = NULL;
-	struct sljit_compiler *compiler = NULL;
-
-	compiler = sljit_create_compiler(NULL);
-	if(!compiler){
-		LH_ERROR("Unable to create sljit compiler instance");
-		return NULL;
-	}
-
-	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, addr);
-
-
-	sljit_code = sljit_generate_code(compiler);
-	if(!sljit_code){
-		LH_ERROR("Unable to build jump!");
-	} else {
-		if(jumpSz){
-			*jumpSz = compiler->size;
-		}
-	}
-
-	if(compiler)
-		sljit_free_compiler(compiler);
-
-	return (uint8_t *)sljit_code;
-}
-
-int inj_get_jump_size(uintptr_t addr){
-	size_t jumpSz;
-	uint8_t *jump;
-	if(!(jump = inj_build_jump(addr, &jumpSz)))
-		return -1;
-	return jumpSz;
-}
-
 /*
  * Calls mmap in the tracked pid
  */
@@ -1162,8 +1123,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					if(lib_to_hook->mmap != 0){
 						LH_VERBOSE(3, "Freeing the memory map");
 						lh_call_func(lh, &iregs, lhm_munmap, "munmap", lib_to_hook->mmap, MMAP_SIZE);
-						if(errno)
-							break;
+						if(errno) break;
 					}
 					break;
 
@@ -1208,3 +1168,23 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 	return rc;
 
 }
+
+/*
+void lh_hook_init(lh_session_t* session) {
+  LH_VERBOSE(1,"Shared object init is running");
+
+  LH_VERBOSE(1,"Autoinit pre: "LX, hook_settings.autoinit_pre);
+  if(hook_settings.autoinit_pre != NULL) {
+     int a = hook_settings.autoinit_pre(session);
+     LH_VERBOSE(1,"Autoinit returned %d", a);
+     if(a != LH_SUCCESS) return;
+  }
+
+  // TODO?
+
+  LH_VERBOSE(1,"Autoinit post: "LX, hook_settings.autoinit_post);
+  if(hook_settings.autoinit_post != NULL) {
+     hook_settings.autoinit_post(session);
+  }
+}
+*/

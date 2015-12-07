@@ -1,5 +1,4 @@
 #include "interface/cpu/cpu_intel.h"
-#include <sljit/sljitLir.h>
 
 inline int inj_trap_bytes(){
 	return 1;
