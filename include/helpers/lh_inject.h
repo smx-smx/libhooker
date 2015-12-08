@@ -6,6 +6,7 @@
 #include "interface/inject_types.h"
 #include "lh_module.h"
 
-int inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr);
+void *inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr);
+int inj_inject_payload(lh_fn_hook_t *fnh, uintptr_t symboladdr);
 
 #endif

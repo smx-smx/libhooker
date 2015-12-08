@@ -14,15 +14,7 @@ int unprotect(void *addr) {
 	return 0;
 }
 
-/*
- * Same as needle variant, but we don't need to copy data back and forth
- */
-int inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr){
-	uint8_t *original_code = (uint8_t *)symboladdr;
-	if(original_code == NULL){
-		LH_PRINT("ERROR: Code Address not specified");
-		return -1;
-	}
+int inj_inject_payload(lh_fn_hook_t *fnh, uintptr_t symboladdr){
 	size_t jumpSz;
 	// Calculate the JUMP from Original to Replacement, so we can get the minimum size to save
 	// We need this to avoid opcode overlapping (especially on Intel, where we can have variable opcode size)
@@ -30,13 +22,31 @@ int inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr){
 	if(!(replacement_jump = inj_build_jump(fnh->hook_fn, 0, &jumpSz)))
 		return -1;
 
+	if( unprotect((void *)symboladdr) < 0)
+			return -1;
+
+	memcpy((void *)symboladdr, replacement_jump, jumpSz);
+	
+	return LH_SUCCESS;
+}
+
+/*
+ * Same as needle variant, but we don't need to copy data back and forth
+ */
+void *inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr){
+	uint8_t *original_code = (uint8_t *)symboladdr;
+	if(original_code == NULL){
+		LH_PRINT("ERROR: Code Address not specified");
+		return NULL;
+	}
+
 	int num_opcode_bytes;
 	if(fnh->opcode_bytes_to_restore > 0){
 		// User specified bytes to save manually
 		num_opcode_bytes = fnh->opcode_bytes_to_restore;
 	} else {
 		// Calculate amount of bytes to save (important for Intel, variable opcode size)
-		num_opcode_bytes = inj_getbackup_size(original_code, LHM_FN_COPY_BYTES, jumpSz);
+		num_opcode_bytes = inj_getbackup_size(original_code, LHM_FN_COPY_BYTES, inj_getjmp_size());
 	}
 
 	if(num_opcode_bytes < 0){
@@ -46,10 +56,11 @@ int inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr){
 	}
 	LH_PRINT("Opcode bytes to save: %d", num_opcode_bytes);
 
+	size_t jumpSz;
 	uint8_t *jump_back;			//custom -> original
 	// JUMP from Replacement back to Original code (skip the original bytes that have been replaced to avoid loop)
 	if(!(jump_back = inj_build_jump(symboladdr + num_opcode_bytes, 0, &jumpSz)))
-		return -1;
+		return NULL;
 
 	// Allocate space for the payload (code size + jump back)
 	// Unlike needle variant, we call mmap here, as we're in the user process
@@ -58,7 +69,7 @@ int inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr){
 	void *pMem = mmap(0, payloadSz, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	if(pMem == MAP_FAILED){
 		LH_ERROR_SE("mmap");
-		return -1;
+		return NULL;
 	}
 	uint8_t *remote_code = (uint8_t *)pMem;
 
@@ -67,13 +78,8 @@ int inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr){
 	inj_relocate_code(remote_code, num_opcode_bytes, symboladdr, (uintptr_t)pMem);
 	memcpy(remote_code + num_opcode_bytes, jump_back, jumpSz);
 
-
-	if( unprotect((void *)symboladdr) < 0)
-		return -1;
-	memcpy((void *)symboladdr, replacement_jump, jumpSz);
-
 	LH_PRINT("Payload Built! 0x"LX" -> 0x"LX" -> 0x"LX" -> 0x"LX"",
 		symboladdr, fnh->hook_fn, pMem, symboladdr + num_opcode_bytes);
 
-	return LH_SUCCESS;
+	return pMem;
 }

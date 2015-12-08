@@ -94,6 +94,7 @@ int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz){
  */
 #if !defined(__i386__) && !defined(__x86_64__)
 int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintptr_t destPC){
+	/* Not yet implemented for other arches */
 	return LH_SUCCESS;
 }
 #endif

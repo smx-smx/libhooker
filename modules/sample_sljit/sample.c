@@ -13,6 +13,19 @@ void (*original_test_function) (int a, char *b);
 void installHooks(){
 	void *sljit_code = NULL;
 	struct sljit_compiler *compiler = NULL;
+
+	/* Uncomment to call the original */
+	/*
+	void (*f)(int, char*) = (void (*)(int a, char *b))original_test_function;
+	f(1, "test");
+	*/
+
+	void *origCode = inj_build_payload_user(&(hook_settings.fn_hooks[1]), (uintptr_t)original_test_function);
+	if(!origCode){
+		LH_ERROR("Cannot build the payload!");
+		return;
+	}
+
 	compiler = sljit_create_compiler(NULL);
 	if(!compiler){
 			LH_ERROR("Unable to create sljit compiler instance");
@@ -22,29 +35,28 @@ void installHooks(){
 	/*
 		Simple routine that returns 1337
 	*/
+	#if 0
+	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, (sljit_sw)origCode);
+	#else
 	sljit_emit_enter(compiler, 0, 0, 0, 0, 0, 0, 0);
 	sljit_emit_op1(compiler, SLJIT_MOV, SLJIT_RETURN_REG, 0, SLJIT_IMM, 1337);
 	sljit_emit_return(compiler, SLJIT_MOV, SLJIT_RETURN_REG, 1337);
+	#endif
 
 	sljit_code = sljit_generate_code(compiler);
 	if(!sljit_code){
 		LH_ERROR("Unable to build JIT Code");
 	}
+
 	if(compiler)
 		sljit_free_compiler(compiler);
-
-	/* Uncomment to call the original */
-	/*
-	void (*f)(int, char*) = (void (*)(int a, char *b))original_test_function;
-	f(1, "test");
-	*/
 
 	lh_hexdump("JIT code", sljit_code, compiler->size);
 	/* Set the code we just generated as the replacement */
 	hook_settings.fn_hooks[1].hook_fn = (uintptr_t)sljit_code;
 	LH_PRINT("Injecting to "LX"", original_test_function);
-	/* And inject it */
-	inj_build_payload_user(&(hook_settings.fn_hooks[1]), (uintptr_t)original_test_function);
+
+	inj_inject_payload(&(hook_settings.fn_hooks[1]), (uintptr_t)original_test_function);
 }
 
 void hooked_autoinit_post(lh_r_process_t * proc) {
