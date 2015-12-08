@@ -987,7 +987,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					case LHM_FN_HOOK_BY_NAME:
 						symboladdr = ld_find_address(lib_to_hook, fnh->symname, NULL);
 						if(symboladdr == 0){
-							symboladdr = lh_dlsym(lh, &iregs, fnh->symname);
+							symboladdr = lib_to_hook->addr_begin + lh_dlsym(lh, &iregs, fnh->symname);
 						}
 						break;
 					case LHM_FN_HOOK_BY_OFFSET:
@@ -1104,7 +1104,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					if (fnh->orig_function_ptr != 0) {
 						uintptr_t func_addr = (do_hook) ? lib_to_hook->mmap : symboladdr;
 						if (LH_SUCCESS != inj_pokedata(lh->proc.pid, fnh->orig_function_ptr, func_addr)) {
-							LH_ERROR("Failed to copy original bytes");
+							LH_ERROR("Failed to copy original function pointr");
 							goto error;
 						}
 					}

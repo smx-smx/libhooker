@@ -1,23 +1,28 @@
 #include "lh_module.h"
-#include "interface/if_inject.h"
 #include "helpers/lh_inject.h"
 
-int inj_build_payload(
-	pid_t r_pid,
-	lh_fn_hook_t *fnh,
-	struct ld_procmaps *lib_to_hook,
-	uintptr_t symboladdr
-)
-{
-	int result = -1;
+int unprotect(void *addr) {
+	// Move the pointer to the page boundary
+	int page_size = getpagesize();
+	addr -= (unsigned long)addr % page_size;
 
-	// Read remote code (max LHM_FN_COPY_BYTES bytes)
-	uint8_t *remote_code = inj_blowdata(r_pid, symboladdr, LHM_FN_COPY_BYTES);
-	if(remote_code == NULL){
-		LH_PRINT("ERROR: Can't read code at 0x"LX, symboladdr);
-		return -1;
+	if(mprotect(addr, page_size, PROT_READ | PROT_WRITE | PROT_EXEC) == -1) {
+			LH_ERROR_SE("mprotect");
+	    return -1;
 	}
 
+	return 0;
+}
+
+/*
+ * Same as needle variant, but we don't need to copy data back and forth
+ */
+int inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr){
+	uint8_t *original_code = (uint8_t *)symboladdr;
+	if(original_code == NULL){
+		LH_PRINT("ERROR: Code Address not specified");
+		return -1;
+	}
 	size_t jumpSz;
 	// Calculate the JUMP from Original to Replacement, so we can get the minimum size to save
 	// We need this to avoid opcode overlapping (especially on Intel, where we can have variable opcode size)
@@ -31,7 +36,7 @@ int inj_build_payload(
 		num_opcode_bytes = fnh->opcode_bytes_to_restore;
 	} else {
 		// Calculate amount of bytes to save (important for Intel, variable opcode size)
-		num_opcode_bytes = inj_getbackup_size(remote_code, LHM_FN_COPY_BYTES, jumpSz);
+		num_opcode_bytes = inj_getbackup_size(original_code, LHM_FN_COPY_BYTES, jumpSz);
 	}
 
 	if(num_opcode_bytes < 0){
@@ -41,74 +46,33 @@ int inj_build_payload(
 	}
 	LH_PRINT("Opcode bytes to save: %d", num_opcode_bytes);
 
-	// Make sure code doesn't contain any PC-relative operation once moved to the new location
-	inj_relocate_code(remote_code, num_opcode_bytes, symboladdr, lib_to_hook->mmap);
-
-	//LH_PRINT("Copying %d original bytes to 0x"LX"", num_opcode_bytes, lib_to_hook->mmap);
-
 	uint8_t *jump_back;			//custom -> original
 	// JUMP from Replacement back to Original code (skip the original bytes that have been replaced to avoid loop)
 	if(!(jump_back = inj_build_jump(symboladdr + num_opcode_bytes, 0, &jumpSz)))
 		return -1;
 
 	// Allocate space for the payload (code size + jump back)
+	// Unlike needle variant, we call mmap here, as we're in the user process
 	size_t payloadSz = num_opcode_bytes + jumpSz;
-	remote_code = realloc(remote_code, payloadSz);
-	if (!remote_code) {
-		LH_ERROR_SE("realloc");
-		if(remote_code)
-			free(remote_code);
+
+	void *pMem = mmap(0, payloadSz, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if(pMem == MAP_FAILED){
+		LH_ERROR_SE("mmap");
 		return -1;
 	}
+	uint8_t *remote_code = (uint8_t *)pMem;
 
+	memcpy(remote_code, original_code, num_opcode_bytes);
+	// Make sure code doesn't contain any PC-relative operation once moved to the new location
+	inj_relocate_code(remote_code, num_opcode_bytes, symboladdr, (uintptr_t)pMem);
 	memcpy(remote_code + num_opcode_bytes, jump_back, jumpSz);
 
-	//Write the payload to the process
-	if (LH_SUCCESS != inj_copydata(r_pid, lib_to_hook->mmap, remote_code, payloadSz)) {
-		LH_ERROR("Failed to copy payload bytes");
-		goto end;
-	}
-
-	//Write the replacement jump to the process
-	if (LH_SUCCESS != inj_copydata(r_pid, symboladdr, replacement_jump, jumpSz)) {
-		LH_ERROR("Failed to copy replacement bytes");
-		goto end;
-	}
-
-	/*if (lh_verbose > 3) {
-		LH_VERBOSE(4, "Dumping the overwritten original function");
-		lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", symboladdr, 0x10);
-		if(errno)
-			break;
-
-		LH_VERBOSE(4, "Dumping the corresponding payload area");
-		lh_call_func(lh, &iregs, lhm_hexdump, "lhm_hexdump", remote_code, payloadSz);
-		if(errno)
-			break;
-	}*/
-
-
-	// Check we have enough room
-	if (lib_to_hook->mmap + payloadSz > lib_to_hook->mmap_end) {
-		LH_ERROR("Not enough memory!");
-		result = -1;
-		goto end;
-	}
-
-
-	// Copy payload to tracked program
-	if (LH_SUCCESS != inj_copydata(r_pid, lib_to_hook->mmap, remote_code, payloadSz)) {
-		LH_ERROR("Unable to copy payload");
-		goto end;
-	}
+	if( unprotect((void *)symboladdr) < 0)
+		return -1;
+	memcpy((void *)symboladdr, replacement_jump, jumpSz);
 
 	LH_PRINT("Payload Built! 0x"LX" -> 0x"LX" -> 0x"LX" -> 0x"LX"",
-		symboladdr, fnh->hook_fn, lib_to_hook->mmap, symboladdr + num_opcode_bytes);
+		symboladdr, fnh->hook_fn, pMem, symboladdr + num_opcode_bytes);
 
-	result = LH_SUCCESS;
-
-	end:
-		if(remote_code)
-			free(remote_code);
-		return result;
+	return LH_SUCCESS;
 }

@@ -45,12 +45,6 @@ int inj_build_abs_jump(uint8_t *buffer, uintptr_t jump_destination, uintptr_t so
 	return LH_SUCCESS;
 }
 
-inline int inj_trap(pid_t pid, struct user *iregs) {
-	uintptr_t nullcode = 0;
-	LH_VERBOSE(3, "Copying Null to stack.");
-	return inj_pokedata(pid, lh_rget_sp(iregs), nullcode);
-}
-
 int inj_pass_args2func(pid_t pid, struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2) {
 	int rc;
 

@@ -1,4 +1,5 @@
 #include "interface/cpu/cpu_intel.h"
+#include "interface/if_inject.h"
 
 inline int inj_trap_bytes(){
 	return 1;
@@ -10,6 +11,11 @@ int inj_build_trap(uint8_t *buffer){
 }
 
 //int inj_relocate_cmp(uint8_t *)
+
+inline int inj_trap(pid_t pid, struct user *iregs) {
+	LH_VERBOSE(3, "Copying Null to stack.");
+	return inj_pokedata(pid, lh_rget_sp(iregs), (uintptr_t)NULL);
+}
 
 /*
  * Relocates code pointed by codePtr from sourcePC to destPC

@@ -21,10 +21,8 @@ struct user {
 #include "lh_common.h"
 
 #if defined(__i386__) || defined(__x86_64__)
-#include "interface/cpu/cpu_intel.h"
-#endif
-
 #include <capstone/capstone.h>
+#endif
 
 /*
  * Common Functions

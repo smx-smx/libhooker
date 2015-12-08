@@ -1,13 +1,17 @@
 function lh_basemod()
-	links { "lh_common", "lh_basemod" }
+	links { "lh_common", "lh_basemod", "dl" }
 end
 
-function lh_extmod()
-	links { "lh_common", "lh_basemod", "lh_extmod" }
+function lh_injmod()
+	links { "lh_common", "lh_basemod", "lh_injmod", "lh_ifcpu", "capstone" }
 end
 
 function lh_lgmod()
 	links { "lh_common", "lh_basemod", "lh_lgmod" }
+end
+
+function lh_sljitmod()
+	links { "lh_common", "lh_basemod", "lh_sljit" }
 end
 
 solution "libhooker"
@@ -27,7 +31,7 @@ solution "libhooker"
 	
 	language "C"
 	includedirs { "include" }
-	--includeexternal("sljit.lua");
+	includeexternal("sljit.lua");
 
 	targetdir "bin"
 	targetprefix("")
@@ -61,18 +65,48 @@ solution "libhooker"
 			"src/common/lh_common.c"
 		}
 
+	project "lh_ifcpu"
+		kind "StaticLib"
+		files {
+			"src/interface/cpu/cpu_common.c"
+		}
+
+		filter "configurations:i386"
+			files {
+				"src/interface/cpu/intel/common_intel.c",
+				"src/interface/cpu/intel/cpu_i386.c",
+			}
+
+		filter "configurations:x86_64"
+			files {
+				"src/interface/cpu/intel/common_intel.c",
+				"src/interface/cpu/intel/cpu_x86_64.c",
+			}
+
+		filter "configurations:armv5"
+			files { "src/interface/cpu/arm/cpu_arm.c" }
+
+		filter "configurations:armv7"
+			files { "src/interface/cpu/arm/cpu_arm.c" }
+
 	group "Helpers"
 		project "lh_basemod"
 			kind "StaticLib"
 			links { "lh_common" }
 			files { "src/helpers/base/*.c" }
 
-		project "lh_extmod"
+		project "lh_injmod"
 			kind "StaticLib"
 			links { "lh_common" }
 			files {
 				"src/helpers/ext/*.c"
-				--"src/interface/cpu/sljit/sljitLir.c"
+			}
+
+		project "lh_sljit"
+			kind "StaticLib"
+			links { "lh_common" }
+			files {
+				"src/interface/cpu/sljit/sljitLir.c"
 			}
 
 		project "lh_lgmod"
@@ -86,32 +120,17 @@ solution "libhooker"
 
 	project "needle"
 		kind "ConsoleApp"
-		links { "lh_common", "lh_extmod" }
+		links { "lh_common", "lh_ifcpu" }
 
 		files {
-			"src/interface/cpu/cpu_common.c",
 			"src/needle/*.c"
 		}
 
 		filter "configurations:i386"
 			links { "capstone" }
-			files {
-				"src/interface/cpu/intel/common_intel.c",
-				"src/interface/cpu/intel/cpu_i386.c",
-			}
 
 		filter "configurations:x86_64"
 			links { "capstone" }
-			files {
-				"src/interface/cpu/intel/common_intel.c",
-				"src/interface/cpu/intel/cpu_x86_64.c",
-			}
-
-		filter "configurations:armv5"
-			files { "src/interface/cpu/arm/cpu_arm.c" }
-
-		filter "configurations:armv7"
-			files { "src/interface/cpu/arm/cpu_arm.c" }
 
 		filter "platforms:linux"
 			files {

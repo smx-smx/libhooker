@@ -7,6 +7,7 @@
 #define __INTERFACE_INJECT_LINUX_H
 
 #include <sys/ptrace.h>
+#include <sys/mman.h>
 #include "interface/exe/linux_elf.h"
 #include "interface/if_cpu.h"
 
