@@ -27,7 +27,7 @@ struct user {
 /*
  * Common Functions
  */
-size_t inj_getjmp_size();
+size_t inj_getjmp_size(uintptr_t addr);
 uint8_t *inj_build_jump(uintptr_t dstAddr, uintptr_t srcAddr, size_t *jumpSz);
 
 int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz);

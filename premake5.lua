@@ -120,7 +120,7 @@ solution "libhooker"
 
 	project "needle"
 		kind "ConsoleApp"
-		links { "lh_common", "lh_ifcpu" }
+		links { "lh_common", "lh_ifcpu", "lh_sljit" }
 
 		files {
 			"src/needle/*.c"

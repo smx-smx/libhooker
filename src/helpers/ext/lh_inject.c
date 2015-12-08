@@ -26,7 +26,7 @@ int inj_inject_payload(lh_fn_hook_t *fnh, uintptr_t symboladdr){
 			return -1;
 
 	memcpy((void *)symboladdr, replacement_jump, jumpSz);
-	
+
 	return LH_SUCCESS;
 }
 
@@ -46,7 +46,8 @@ void *inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr){
 		num_opcode_bytes = fnh->opcode_bytes_to_restore;
 	} else {
 		// Calculate amount of bytes to save (important for Intel, variable opcode size)
-		num_opcode_bytes = inj_getbackup_size(original_code, LHM_FN_COPY_BYTES, inj_getjmp_size());
+		// NOTE: original_code being passed is just a random address to calculate a jump size (for now)
+		num_opcode_bytes = inj_getbackup_size(original_code, LHM_FN_COPY_BYTES, inj_getjmp_size((uintptr_t)original_code));
 	}
 
 	if(num_opcode_bytes < 0){

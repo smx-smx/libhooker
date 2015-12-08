@@ -1,7 +1,45 @@
 #include "interface/if_inject.h"
 #include "interface/if_cpu.h"
 
-size_t inj_getjmp_size(){
+#ifdef PAYLOAD_SLJIT
+#include "sljit/sljitLir.h"
+uint8_t *inj_build_jump(uintptr_t dstAddr, uintptr_t srcAddr, size_t *jumpSz){
+	void *sljit_code = NULL;
+	struct sljit_compiler *compiler = NULL;
+
+	compiler = sljit_create_compiler(NULL);
+	if(!compiler){
+		LH_ERROR("Unable to create sljit compiler instance");
+		return NULL;
+	}
+
+	sljit_emit_ijump(compiler, SLJIT_JUMP, SLJIT_IMM, (sljit_sw)dstAddr);
+
+
+	sljit_code = sljit_generate_code(compiler);
+	if(!sljit_code){
+		LH_ERROR("Unable to build jump!");
+	} else {
+		if(jumpSz){
+			*jumpSz = compiler->size;
+		}
+	}
+
+	if(compiler)
+		sljit_free_compiler(compiler);
+
+	return (uint8_t *)sljit_code;
+}
+
+size_t inj_getjmp_size(uintptr_t addr){
+	size_t jumpSz;
+	uint8_t *jump;
+	if(!(jump = inj_build_jump(addr, 0, &jumpSz)))
+		return -1;
+	return jumpSz;
+}
+#else
+size_t inj_getjmp_size(uintptr_t addr){
 	#ifdef LH_JUMP_ABS
 		return inj_absjmp_opcode_bytes();
 	#else
@@ -10,7 +48,7 @@ size_t inj_getjmp_size(){
 }
 
 uint8_t *inj_build_jump(uintptr_t dstAddr, uintptr_t srcAddr, size_t *jumpSzPtr){
-	size_t jumpSz = inj_getjmp_size();
+	size_t jumpSz = inj_getjmp_size(dstAddr);
 	uint8_t *buffer = calloc(jumpSz, 1);
 	if(!buffer)
 		return NULL;
@@ -29,6 +67,7 @@ uint8_t *inj_build_jump(uintptr_t dstAddr, uintptr_t srcAddr, size_t *jumpSzPtr)
 		free(buffer);
 		return NULL;
 }
+#endif
 
 int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes){
 	csh handle;
