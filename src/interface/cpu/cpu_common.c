@@ -11,18 +11,23 @@ size_t inj_getjmp_size(){
 
 uint8_t *inj_build_jump(uintptr_t dstAddr, uintptr_t srcAddr, size_t *jumpSzPtr){
 	size_t jumpSz = inj_getjmp_size();
-	char *buffer = calloc(jumpSz, 1);
+	uint8_t *buffer = calloc(jumpSz, 1);
 	if(!buffer)
 		return NULL;
 	#ifdef LH_JUMP_ABS
-		return inj_build_abs_jump(buffer, dstAddr, srcAddr);
+		if(inj_build_abs_jump(buffer, dstAddr, srcAddr) != LH_SUCCESS)
+			goto error;
 	#else
-		return inj_build_rel_jump(buffer, dstAddr, srcAddr);
+		if(inj_build_rel_jump(buffer, dstAddr, srcAddr) != LH_SUCCESS)
+			goto error;
 	#endif
 	if(jumpSzPtr)
 		*jumpSzPtr = jumpSz;
 	lh_hexdump("jump", buffer, jumpSz);
 	return buffer;
+	error:
+		free(buffer);
+		return NULL;
 }
 
 int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes){

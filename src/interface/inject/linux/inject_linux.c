@@ -13,8 +13,7 @@
 //debug
 #include <time.h>
 
-//everything we need to work on linux
-#include "interface/inject/inject_linux.h"
+#include "interface/if_inject.h"
 #include "lh_module.h"
 
 #define MMAP_SIZE 0x1000 //4096 bytes

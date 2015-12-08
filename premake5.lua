@@ -35,7 +35,11 @@ solution "libhooker"
 
 	filter "platforms:linux"
 		system "linux"
-		defines { "_GNU_SOURCE" }
+		defines {
+			"_GNU_SOURCE",
+			"LH_JUMP_ABS",
+			"PLATFORM_LINUX"
+		}
 		buildoptions {
 			"-fPIC", "-Wall"
 		}

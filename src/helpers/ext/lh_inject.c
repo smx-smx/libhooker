@@ -1,5 +1,6 @@
 #include "lh_module.h"
-#include "interface/inject/inject_linux.h"
+#include "interface/if_inject.h"
+#include "helpers/lh_inject.h"
 
 int inj_build_payload(
 	pid_t r_pid,

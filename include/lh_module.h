@@ -6,9 +6,8 @@
 #ifndef __LH_MODULE_H
 #define __LH_MODULE_H
 
-#include "interface/inject/inject_linux.h"
-#include "lh_mod_common.h"
 #include "lh_common.h"
+#include "interface/inject_types.h"
 
 #define LHM_MAX_FN_HOOKS 32
 
@@ -37,7 +36,6 @@ typedef struct {
 	size_t aob_size;
 	char *aob_pattern;
 } lh_fn_hook_t;
-
 
 /*
  * Module definition

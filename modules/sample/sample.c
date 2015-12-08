@@ -1,5 +1,8 @@
 #include <stdio.h>
+#include "helpers/lh_base.h"
 #include "lh_module.h"
+
+
 #include <sys/mman.h>
 #include <signal.h>
 

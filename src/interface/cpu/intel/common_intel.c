@@ -93,7 +93,7 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 
 		curPos += insn->size;
 	}
-
+	goto ret;
 	ret:
 		cs_free(insns, count);
 		return result;

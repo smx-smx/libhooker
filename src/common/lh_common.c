@@ -6,8 +6,6 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <fcntl.h>
-
-#include "interface/if_os.h"
 #include "lh_common.h"
 
 int lh_verbose = 0;

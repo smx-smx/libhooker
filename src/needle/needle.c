@@ -12,7 +12,7 @@
 #include <sys/resource.h>
 #endif
 
-#include "interface/inject/inject_linux.h"
+#include "interface/if_inject.h"
 
 #define APP_NAME "needle"
 int g_optind_lib = 0, g_optind_exe = 0;
@@ -120,7 +120,7 @@ int runProc(void *arg){
 	};
 
 	int ret = execve(argv[0], argv, envp);
-	
+
 	#else
 
 	int ret = execv(argv[0], argv);
@@ -147,7 +147,7 @@ int main(int argc, char *argv[]) {
 			re = -6;
 			break;
 		}
-		
+
 		if(!g_pid){
 			if(!g_optind_exe){
 				print_usage_and_quit("Missing pid or path to executable to run!");
@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
 					else
 						prog_argv = realloc(prog_argv, sizeof(char *) * (ntok + 1));
 					prog_argv[ntok++] = strdup(tok);
-	
+
 					tok = strtok(NULL, " ");
 				}
 				session->proc.prog_argc = ntok;
@@ -192,7 +192,7 @@ int main(int argc, char *argv[]) {
 					LH_ERROR_SE("malloc");
 					return EXIT_FAILURE;
 				}
-				
+
 				void *stack_start = (void *)((uintptr_t)stack_end + rl.rlim_cur); //stack grows downwards
 
 				LH_PRINT("Launching executable '%s'", argv[g_optind_exe]);
@@ -207,7 +207,7 @@ int main(int argc, char *argv[]) {
 				session->started_by_needle = true;
 			}
 		}
-		
+
 		/*while(1){
 			LH_PRINT("Waiting for %d ...", g_pid);
 			if(kill(g_pid, 0) < 0)
@@ -236,7 +236,7 @@ int main(int argc, char *argv[]) {
 		//don't subtract 1 because we need tty name
 		//add 1 because we need the module name
 		int argp = argc - g_optind_lib + 1;
-		
+
 		//create and prepare module arguments
 		char **mod_argv = calloc(1, sizeof(char *) * argp);
 		argp = 0;
@@ -259,7 +259,7 @@ int main(int argc, char *argv[]) {
 		if(!session->started_by_needle){
 			//crate and prepare memory for hooked program arguments
 			char *cmdline;
-			
+
 			argp = 0;
 			do {
 				FILE *pargs;
