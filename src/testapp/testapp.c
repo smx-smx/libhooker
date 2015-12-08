@@ -11,20 +11,22 @@ void otherfunction(int a, char *s) {
 	LH_PRINT("%%s is: %s, %%d is %d\n", s, a);
 }
 
-void testfunction(int a, char *s) {
+int testfunction(int a, char *s) {
 	LH_PRINT("inside the original test function.");
 	LH_PRINT("we just print some more.");
 	LH_PRINT("in order to make this function");
 	LH_PRINT("big enough, so we can hook it later");
 	LH_PRINT("%%s is: %s, %%d is %d\n", s, a);
 	otherfunction(a, s);
+	return 0;
 }
 
 void run() {
 	char *stuff = "test buffer";
 	int a = 1;
 	while (1) {
-		testfunction(a, stuff);
+		int ret = testfunction(a, stuff);
+		LH_PRINT("RETVAL: %d", ret);
 		a++;
 		sleep(1);
 	}

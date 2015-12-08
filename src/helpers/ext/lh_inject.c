@@ -67,6 +67,7 @@ int inj_build_payload_user(lh_fn_hook_t *fnh, uintptr_t symboladdr){
 	inj_relocate_code(remote_code, num_opcode_bytes, symboladdr, (uintptr_t)pMem);
 	memcpy(remote_code + num_opcode_bytes, jump_back, jumpSz);
 
+
 	if( unprotect((void *)symboladdr) < 0)
 		return -1;
 	memcpy((void *)symboladdr, replacement_jump, jumpSz);
