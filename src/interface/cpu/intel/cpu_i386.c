@@ -1,4 +1,5 @@
 #include "interface/if_cpu.h"
+#include "interface/if_inject.h"
 
 //-------------------------------------------- i386 begin
 inline int inj_opcode_bytes(){
@@ -64,7 +65,7 @@ int inj_pass_args2func(pid_t pid, struct user *iregs, uintptr_t fn, uintptr_t ar
 		return rc;
 
 	lh_rset_ip(iregs, fn);
-	lh_rset_ax(iregs, 0); 
+	lh_rset_ax(iregs, 0);
 
         return LH_SUCCESS;
 }

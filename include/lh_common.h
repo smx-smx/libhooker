@@ -42,9 +42,11 @@ char *readlink_safe(char *path);
 
 #    if __WORDSIZE == 64
 #        define LX "%lx"
+#        define LLX LX
 #        define LU "%lu"
 #    else
 #        define LX "%x"
+#        define LLX "%llx"
 #        define LU "%u"
 #    endif
 

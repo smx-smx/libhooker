@@ -43,7 +43,7 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 	off_t curPos = 0;
 	for (i = 0; i < count; i++) {
 		cs_insn *insn = &(insns[i]);
-		printf("0x"LX":\t%s\t\t%s\n", insn->address, insn->mnemonic, insn->op_str);
+		printf("0x"LLX":\t%s\t\t%s\n", insn->address, insn->mnemonic, insn->op_str);
 		cs_detail *detail = insn->detail;
 
 		for(j=0; j<detail->x86.op_count; j++){
@@ -79,11 +79,11 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 						printf("\t\t\toperands["LU"].mem.index: REG = %s\n", j, cs_reg_name(handle, op->mem.index));
 					}
 					if (op->mem.disp != 0){
-						printf("\t\t\toperands["LU"].mem.disp: 0x"LX"\n", j, op->mem.disp);
+						printf("\t\t\toperands["LU"].mem.disp: 0x"LLX"\n", j, op->mem.disp);
 					}
 					break;
 				case X86_OP_IMM:
-					printf("\t\toperands["LU"].type: IMM = 0x"LX"\n", j, op->imm);
+					printf("\t\toperands["LU"].type: IMM = 0x"LLX"\n", j, op->imm);
 					break;
 				case X86_OP_INVALID:
 				default:
