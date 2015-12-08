@@ -1,4 +1,29 @@
+#include "interface/if_inject.h"
 #include "interface/if_cpu.h"
+
+size_t inj_getjmp_size(){
+	#ifdef LH_JUMP_ABS
+		return inj_absjmp_opcode_bytes();
+	#else
+		return inj_reljmp_opcode_bytes();
+	#endif
+}
+
+uint8_t *inj_build_jump(uintptr_t dstAddr, uintptr_t srcAddr, size_t *jumpSzPtr){
+	size_t jumpSz = inj_getjmp_size();
+	char *buffer = calloc(jumpSz, 1);
+	if(!buffer)
+		return NULL;
+	#ifdef LH_JUMP_ABS
+		return inj_build_abs_jump(buffer, dstAddr, srcAddr);
+	#else
+		return inj_build_rel_jump(buffer, dstAddr, srcAddr);
+	#endif
+	if(jumpSzPtr)
+		*jumpSzPtr = jumpSz;
+	lh_hexdump("jump", buffer, jumpSz);
+	return buffer;
+}
 
 int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes){
 	csh handle;

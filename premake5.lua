@@ -27,7 +27,7 @@ solution "libhooker"
 	
 	language "C"
 	includedirs { "include" }
-	includeexternal("sljit.lua");
+	--includeexternal("sljit.lua");
 
 	targetdir "bin"
 	targetprefix("")
@@ -67,8 +67,8 @@ solution "libhooker"
 			kind "StaticLib"
 			links { "lh_common" }
 			files {
-				"src/helpers/ext/*.c",
-				"src/interface/cpu/sljit/sljitLir.c"
+				"src/helpers/ext/*.c"
+				--"src/interface/cpu/sljit/sljitLir.c"
 			}
 
 		project "lh_lgmod"

@@ -46,17 +46,6 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 		printf("0x"LX":\t%s\t\t%s\n", insn->address, insn->mnemonic, insn->op_str);
 		cs_detail *detail = insn->detail;
 
-		void *sljit_code = NULL;
-		struct sljit_compiler *compiler = NULL;
-
-		compiler = sljit_create_compiler(NULL);
-		if (!compiler){
-			LH_ERROR("Unable to create sljit compiler instance");
-			result = -1;
-			goto ret;
-		}
-
-
 		for(j=0; j<detail->x86.op_count; j++){
 			cs_x86_op *op = &(detail->x86.operands[j]);
 			switch(op->type) {
@@ -103,11 +92,6 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 		}
 
 		curPos += insn->size;
-
-		sljit_free_compiler(compiler);
-		if(sljit_code)
-			sljit_free_code(sljit_code);
-
 	}
 
 	ret:

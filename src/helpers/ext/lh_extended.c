@@ -21,7 +21,7 @@ int inj_build_payload(
 	// Calculate the JUMP from Original to Replacement, so we can get the minimum size to save
 	// We need this to avoid opcode overlapping (especially on Intel, where we can have variable opcode size)
 	uint8_t *replacement_jump;	//original -> custom
-	if(!(replacement_jump = inj_build_jump(fnh->hook_fn, &jumpSz)))
+	if(!(replacement_jump = inj_build_jump(fnh->hook_fn, 0, &jumpSz)))
 		return -1;
 
 	int num_opcode_bytes;
@@ -47,7 +47,7 @@ int inj_build_payload(
 
 	uint8_t *jump_back;			//custom -> original
 	// JUMP from Replacement back to Original code (skip the original bytes that have been replaced to avoid loop)
-	if(!(jump_back = inj_build_jump(symboladdr + num_opcode_bytes, &jumpSz)))
+	if(!(jump_back = inj_build_jump(symboladdr + num_opcode_bytes, 0, &jumpSz)))
 		return -1;
 
 	// Allocate space for the payload (code size + jump back)
@@ -61,7 +61,6 @@ int inj_build_payload(
 	}
 
 	memcpy(remote_code + num_opcode_bytes, jump_back, jumpSz);
-	sljit_free_code(jump_back);
 
 	//Write the payload to the process
 	if (LH_SUCCESS != inj_copydata(r_pid, lib_to_hook->mmap, remote_code, payloadSz)) {
@@ -74,7 +73,6 @@ int inj_build_payload(
 		LH_ERROR("Failed to copy replacement bytes");
 		goto end;
 	}
-	sljit_free_code(replacement_jump);
 
 	/*if (lh_verbose > 3) {
 		LH_VERBOSE(4, "Dumping the overwritten original function");
