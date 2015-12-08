@@ -150,4 +150,11 @@ solution "libhooker"
 			files { "modules/sample/*.c" }
 			lh_basemod()
 
+		project "lhm_sample_sljit"
+			kind "SharedLib"
+			files { "modules/sample_sljit/*.c" }
+			lh_basemod()
+			lh_injmod()
+			lh_sljitmod()
+
 		dofileopt("modules.lua");
