@@ -608,6 +608,7 @@ uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function
 		function = lh_dlsym(lh, iregs, funcname);
 	}
 
+	// Causes a fault after the function call (return to 0) (to return to the debugger)
 	if ((errno = inj_trap(lh->proc.pid, iregs)) != LH_SUCCESS){
 		return 0;
 	}
@@ -620,7 +621,7 @@ uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function
 	// Return result
 	uintptr_t re = lh_rget_ax(iregs);
 	if(funcname && strlen(funcname) > 0)
-		LH_VERBOSE(2, "CALL: %s(0x" LX ", 0x" LX ") => "LX"", funcname, arg0, arg1, re);
+		LH_VERBOSE(2, "CALL @0x"LX": %s(0x" LX ", 0x" LX ") => "LX"", function, funcname, arg0, arg1, re);
 	return re;
 }
 

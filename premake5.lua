@@ -144,7 +144,8 @@ solution "libhooker"
 		files {
 			"src/testapp/*.c"
 		}
-		links { "lh_common" }
+		-- libdl somehow required when using ASM hooks
+		links { "lh_common", "dl" }
 
 	project "lh_preload"
 		kind "SharedLib"
