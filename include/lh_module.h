@@ -32,6 +32,7 @@ typedef struct {
 	uintptr_t sym_offset;
 	uintptr_t hook_fn;
 	uintptr_t orig_function_ptr;
+	uintptr_t code_rest_ptr;
 	size_t opcode_bytes_to_restore;
 	size_t aob_size;
 	char *aob_pattern;

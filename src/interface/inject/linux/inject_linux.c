@@ -856,7 +856,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 
 		/*
-			Verify that the library load succeded by probung /proc/<pid>/maps,
+			Verify that the library load succeded by probing /proc/<pid>/maps,
 			<pid> is the pid of the process we're tracking
 		*/
 		do {
@@ -1081,11 +1081,9 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				*/
 
 				// Position of payload in target address space
+				uintptr_t orig_code_addr = 0;
 				if(do_hook){
-					if (lib_to_hook->mmap + LHM_FN_COPY_BYTES > lib_to_hook->mmap_end) {
-						LH_PRINT("ERROR: not enough memory for hook_settings->fn_hooks[%d]", fni);
-						break;
-					}
+					orig_code_addr = lib_to_hook->mmap_begin;
 
 					//Build the actual payload
 					if(inj_build_payload(
@@ -1102,9 +1100,19 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				after_hook:
 					// We store the original function address, if wanted
 					if (fnh->orig_function_ptr != 0) {
-						uintptr_t func_addr = (do_hook) ? lib_to_hook->mmap : symboladdr;
+						uintptr_t func_addr = (do_hook) ? orig_code_addr : symboladdr;
+						LH_PRINT("original code ptr: 0x"LX"", func_addr);
 						if (LH_SUCCESS != inj_pokedata(lh->proc.pid, fnh->orig_function_ptr, func_addr)) {
 							LH_ERROR("Failed to copy original function pointr");
+							goto error;
+						}
+					}
+					if (fnh->code_rest_ptr != 0) {
+						size_t jmpSz = inj_getjmp_size(lib_to_hook->mmap_begin);
+						uintptr_t func_addr = (do_hook) ? symboladdr + jmpSz: symboladdr;
+						LH_PRINT("rest code ptr: 0x"LX"", func_addr);
+						if (LH_SUCCESS != inj_pokedata(lh->proc.pid, fnh->code_rest_ptr, func_addr)) {
+							LH_ERROR("Failed to copy rest code pointr");
 							goto error;
 						}
 					}

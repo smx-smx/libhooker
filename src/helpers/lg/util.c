@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __linux__
+#if defined(_WIN32) || defined(_WIN64)
 #include <stdlib.h>
 const char *addr2sym(uintptr_t addr){ return NULL; }
 void *sym2addr(const char *name){ return NULL; }

@@ -122,7 +122,7 @@ function make_parser(){
 		case "$line" in
 			*====*Building*)
 				$yellow; echo "$text"; $normal
-				in_prj=1	
+				in_prj=1
 				;;
 			"Creating "*)
 				text=$(echo $text | sed 's/Creating\ //g')
@@ -165,6 +165,15 @@ case $OSTYPE in
 		gen_cmd="gmake"
 		build_cmd="make -j${MAKE_JOBS}"
 		CONF_OS="linux"
+		;;
+	freebsd*)
+		ok "Freebsd detected"
+		gen_cmd="gmake verbose=1"
+		build_cmd="gmake -j${MAKE_JOBS}"
+		CONF_OS="linux"
+		CC=gcc5
+		CXX=g++5
+		export CC CXX
 		;;
 	*)
 		err_exit "Unsupported OS '$OSTYPE'!"
@@ -225,7 +234,7 @@ case "$1" in
 esac
 
 if [ -z $CONF_ARCH ]; then
-	case $MACH in 
+	case $MACH in
 		x86_64*)
 			ok "x86_64 detected"
 			CONF_ARCH="x86_64"

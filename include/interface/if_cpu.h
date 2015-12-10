@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#ifdef __linux__
+#if defined(__linux__) || defined(__FreeBSD__)
 #include <sys/wait.h>
 #endif
 #include <errno.h>
@@ -14,8 +14,53 @@
 struct user {
 	long uregs[18];
 };
-#elif __linux__
+#elif defined(__linux__)
 #include <sys/user.h>
+#endif
+
+#ifdef __FreeBSD__
+#include <x86/reg.h>
+#define r15 r_r15
+#define r14 r_r14
+#define r13 r_r13
+#define r12 r_r12
+#define rbp r_rbp
+#define rbx r_rbx
+#define r11 r_r11
+#define r10 r_r10
+#define r9 r_r9
+#define r8 r_r8
+#define rax r_rax
+#define rcx r_rcx
+#define rdx r_rdx
+#define rsi r_rsi
+#define rdi r_rdi
+#define rip r_rip
+#define cs r_cs
+#define eflags r_eflags
+#define rsp r_rsp
+#define ss r_ss
+#define fs_base r_fs_base
+#define gs_base r_gs_base
+#define ds r_ds
+#define es r_es
+#define fs r_fs
+#define gs r_gs
+struct user
+{
+  struct reg       regs;
+  int                           u_fpvalid;
+  unsigned long int             u_tsize;
+  unsigned long int             u_dsize;
+  unsigned long int             u_ssize;
+  unsigned long                 start_code;
+  unsigned long                 start_stack;
+  long int                      signal;
+  int                           reserved;
+  unsigned long int             magic;
+  char                          u_comm [32];
+  unsigned long int             u_debugreg [8];
+};
 #endif
 
 #include "lh_common.h"

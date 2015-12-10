@@ -2,6 +2,10 @@
 #include "interface/if_cpu.h"
 #include "interface/cpu/cpu_intel.h"
 
+#ifdef __FreeBSD__
+#include <x86/reg.h>
+#endif
+
 //------------------------------------------ x86 begin
 inline int inj_opcode_bytes(){
 	return -1;
@@ -119,7 +123,9 @@ void lh_dump_regs(struct user *r) {
 	LH_VERBOSE(3, "%%rsi : 0x" LX, r->regs.rsi);
 	LH_VERBOSE(3, "%%rdi : 0x" LX, r->regs.rdi);
 	LH_VERBOSE(3, "%%rbp : 0x" LX, r->regs.rbp);
+#ifndef __FreeBSD__
 	LH_VERBOSE(3, "%%orax: 0x" LX, r->regs.orig_rax);
+#endif
 	LH_VERBOSE(3, "%%rsp : 0x" LX, r->regs.rsp);
 }
 //------------------------------------------ x86 end

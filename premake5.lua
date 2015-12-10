@@ -1,5 +1,5 @@
 function lh_basemod()
-	links { "lh_common", "lh_basemod", "dl" }
+	links { "lh_common", "lh_basemod" }
 end
 
 function lh_injmod()
@@ -44,8 +44,9 @@ solution "libhooker"
 			"LH_JUMP_ABS",
 			"PLATFORM_LINUX"
 		}
+		pic "on"
 		buildoptions {
-			"-fPIC", "-Wall"
+			"-Wall"
 		}
 
 
@@ -143,6 +144,15 @@ solution "libhooker"
 		files {
 			"src/testapp/*.c"
 		}
+		links { "lh_common" }
+
+	project "lh_preload"
+		kind "SharedLib"
+		files {
+			"src/interface/inject/linux/inject_preload.c"
+		}
+		-- links { "dl", "lh_common" }
+		links { "lh_common" }
 
 	group "Modules"
 		project "lhm_sample"

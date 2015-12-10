@@ -150,6 +150,11 @@ int inj_build_payload(
 {
 	int result = -1;
 
+	if (lib_to_hook->mmap_begin + LHM_FN_COPY_BYTES > lib_to_hook->mmap_end) {
+		LH_PRINT("ERROR: not enough memory to backup code");
+		return -1;
+	}
+
 	// Read remote code (max LHM_FN_COPY_BYTES bytes)
 	uint8_t *remote_code = inj_blowdata(r_pid, symboladdr, LHM_FN_COPY_BYTES);
 	if(remote_code == NULL){
@@ -181,7 +186,7 @@ int inj_build_payload(
 	LH_PRINT("Opcode bytes to save: %d", num_opcode_bytes);
 
 	// Make sure code doesn't contain any PC-relative operation once moved to the new location
-	inj_relocate_code(remote_code, num_opcode_bytes, symboladdr, lib_to_hook->mmap);
+	inj_relocate_code(remote_code, num_opcode_bytes, symboladdr, lib_to_hook->mmap_begin);
 
 	//LH_PRINT("Copying %d original bytes to 0x"LX"", num_opcode_bytes, lib_to_hook->mmap);
 
@@ -203,7 +208,7 @@ int inj_build_payload(
 	memcpy(remote_code + num_opcode_bytes, jump_back, jumpSz);
 
 	//Write the payload to the process
-	if (LH_SUCCESS != inj_copydata(r_pid, lib_to_hook->mmap, remote_code, payloadSz)) {
+	if (LH_SUCCESS != inj_copydata(r_pid, lib_to_hook->mmap_begin, remote_code, payloadSz)) {
 		LH_ERROR("Failed to copy payload bytes");
 		goto end;
 	}
@@ -228,7 +233,7 @@ int inj_build_payload(
 
 
 	// Check we have enough room
-	if (lib_to_hook->mmap + payloadSz > lib_to_hook->mmap_end) {
+	if (lib_to_hook->mmap_begin + payloadSz > lib_to_hook->mmap_end) {
 		LH_ERROR("Not enough memory!");
 		result = -1;
 		goto end;
@@ -236,13 +241,15 @@ int inj_build_payload(
 
 
 	// Copy payload to tracked program
-	if (LH_SUCCESS != inj_copydata(r_pid, lib_to_hook->mmap, remote_code, payloadSz)) {
+	if (LH_SUCCESS != inj_copydata(r_pid, lib_to_hook->mmap_begin, remote_code, payloadSz)) {
 		LH_ERROR("Unable to copy payload");
 		goto end;
 	}
 
 	LH_PRINT("Payload Built! 0x"LX" -> 0x"LX" -> 0x"LX" -> 0x"LX"",
-		symboladdr, fnh->hook_fn, lib_to_hook->mmap, symboladdr + num_opcode_bytes);
+		symboladdr, fnh->hook_fn, lib_to_hook->mmap_begin, symboladdr + num_opcode_bytes);
+
+	lib_to_hook->mmap_begin += (uintptr_t)payloadSz;
 
 	result = LH_SUCCESS;
 
