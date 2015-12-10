@@ -1083,6 +1083,8 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 				// Position of payload in target address space
 				uintptr_t orig_code_addr = 0;
+				uintptr_t rest_code_addr = 0;
+				size_t saved_bytes = 0;
 				if(do_hook){
 					orig_code_addr = lib_to_hook->mmap_begin;
 
@@ -1091,7 +1093,8 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 							lh->proc.pid, //pid of the process
 							fnh, //infos about the replacement
 							lib_to_hook, //infos about the library/exe
-							symboladdr //address of the original function
+							symboladdr, //address of the original function
+							&saved_bytes //number of saved opcodes
 					) < 0){
 						LH_ERROR("Cannot build payload!");
 						break;
@@ -1110,7 +1113,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 					}
 					if (fnh->code_rest_ptr != 0) {
 						size_t jmpSz = inj_getjmp_size(lib_to_hook->mmap_begin);
-						uintptr_t func_addr = (do_hook) ? symboladdr + jmpSz: symboladdr;
+						uintptr_t func_addr = (do_hook) ? symboladdr + saved_bytes: symboladdr;
 						LH_PRINT("rest code ptr: 0x"LX"", func_addr);
 						if (LH_SUCCESS != inj_pokedata(lh->proc.pid, fnh->code_rest_ptr, func_addr)) {
 							LH_ERROR("Failed to copy rest code pointr");

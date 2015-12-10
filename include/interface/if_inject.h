@@ -22,7 +22,7 @@ int lh_detach(lh_session_t * session);
 void lh_free(lh_session_t ** session);
 int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_libaddr);
 lh_r_process_t *lh_rproc_gen(lh_session_t *lh);
-int inj_build_payload(pid_t r_pid, lh_fn_hook_t *fnh, struct ld_procmaps *lib_to_hook, uintptr_t symboladdr);
+int inj_build_payload(pid_t r_pid, lh_fn_hook_t *fnh, struct ld_procmaps *lib_to_hook, uintptr_t symboladdr, size_t *saved_bytes);
 
 /* Static functions shouldn't be visible elsewhere. Leaving them here for possible changes
 static int inj_exec(pid_t pid);

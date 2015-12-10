@@ -145,7 +145,8 @@ int inj_build_payload(
 	pid_t r_pid,
 	lh_fn_hook_t *fnh,
 	struct ld_procmaps *lib_to_hook,
-	uintptr_t symboladdr
+	uintptr_t symboladdr,
+	size_t *saved_bytes
 )
 {
 	int result = -1;
@@ -184,6 +185,9 @@ int inj_build_payload(
 		num_opcode_bytes = LHM_FN_COPY_BYTES;
 	}
 	LH_PRINT("Opcode bytes to save: %d", num_opcode_bytes);
+
+	if(saved_bytes)
+		*saved_bytes = num_opcode_bytes;
 
 	// Make sure code doesn't contain any PC-relative operation once moved to the new location
 	inj_relocate_code(remote_code, num_opcode_bytes, symboladdr, lib_to_hook->mmap_begin);
