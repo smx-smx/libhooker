@@ -46,6 +46,7 @@ typedef struct {
 	uintptr_t fn_realloc;
 	uintptr_t fn_free;
 	uintptr_t fn_dlopen;
+	uintptr_t fn_dlerror;
 	uintptr_t fn_dlclose;
 	uintptr_t fn_dlsym;
 } lh_session_t;

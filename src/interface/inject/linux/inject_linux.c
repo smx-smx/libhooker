@@ -89,6 +89,7 @@ do { \
 		LD_LIB_FIND_FN_ADDR("dlopen", lh->fn_dlopen, lib_dl);
 		LD_LIB_FIND_FN_ADDR("dlclose", lh->fn_dlclose, lib_dl);
 		LD_LIB_FIND_FN_ADDR("dlsym", lh->fn_dlsym, lib_dl);
+		LD_LIB_FIND_FN_ADDR("dlerror", lh->fn_dlerror, lib_dl);
 	} else {
 		LD_LIB_FIND_FN_ADDR("__libc_dlopen_mode", lh->fn_dlopen, lib_c);
 		LD_LIB_FIND_FN_ADDR("__libc_dlclose", lh->fn_dlclose, lib_c);
@@ -207,6 +208,31 @@ void *inj_blowdata(pid_t pid, uintptr_t src_in_remote, size_t datasz) {
 		LH_ERROR_SE("malloc");
 	}
 	return re;
+}
+
+char *inj_strcpy_tolocal(pid_t pid, uintptr_t r_str){
+	if(!r_str)
+		return NULL;
+	size_t strSz = 1;
+	char *l_str = NULL;
+	for(; ; strSz++){
+		if(!l_str){
+			l_str = calloc(strSz, 1);
+		} else {
+			l_str = realloc(l_str, strSz);
+		}
+		uintptr_t word;
+		if (LH_SUCCESS != inj_peekdata(pid, r_str++, &word)){
+			free(l_str);
+			return NULL;
+		}
+		uint8_t ch = (uint8_t)word;
+		l_str[strSz-1] = ch;
+		if(ch == 0x00){
+			break;
+		}
+	}
+	return l_str;
 }
 
 uint8_t *inj_getcode(pid_t pid, uintptr_t codeAddr, int opcodeNum, int *validBytes){
@@ -845,9 +871,17 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 		// Call dlopen and get result
 		dlopen_handle = lh_call_func(lh, &iregs, lh->fn_dlopen, "dlopen", r_allocs[0], (RTLD_LAZY | RTLD_GLOBAL));
-
 		LH_VERBOSE(1, "library opened at 0x" LX, dlopen_handle);
 		if(!dlopen_handle || errno){
+			if(lh->fn_dlerror){
+				uintptr_t r_str = lh_call_func(lh, &iregs, lh->fn_dlerror, "dlerror", (uintptr_t)NULL, (uintptr_t)NULL);
+				char *l_str = inj_strcpy_tolocal(lh->proc.pid, r_str);
+				if(!l_str){
+					LH_ERROR("dlerror failed!");
+				} else {
+					LH_PRINT("dlerror(): %s", l_str);
+				}
+			}
 			LH_ERROR("dlopen failed!");
 			lh_dump_regs(&iregs);
 			break;
