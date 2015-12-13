@@ -67,7 +67,7 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 						const char *reg_name = cs_reg_name(handle, op->mem.base);
 						printf("\t\t\toperands["LU"].mem.base: REG = %s\n", j, reg_name);
 						if(!strcmp(reg_name, (char *)&pcRegName)){
-							if(!strcmp(insn->mnemonic, "cmp")){
+							//if(!strcmp(insn->mnemonic, "cmp")){
 								uint displacement = (sourcePC + insn->size) - destPC;
 								if(lh_verbose >= 3){
 									LH_VERBOSE(3, ">> New Displacement: "LX"", displacement);
@@ -78,7 +78,7 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 								if(lh_verbose >= 3){
 									lh_hexdump("instruction after", codePtr + curPos, insn->size);
 								}
-							}
+							//}
 						}
 					}
 					if (op->mem.index != X86_REG_INVALID){
