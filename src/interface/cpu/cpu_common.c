@@ -61,7 +61,8 @@ uint8_t *inj_build_jump(uintptr_t dstAddr, uintptr_t srcAddr, size_t *jumpSzPtr)
 	#endif
 	if(jumpSzPtr)
 		*jumpSzPtr = jumpSz;
-	lh_hexdump("jump", buffer, jumpSz);
+	if(lh_verbose > 3)
+		lh_hexdump("jump", buffer, jumpSz);
 	return buffer;
 	error:
 		free(buffer);
@@ -69,6 +70,7 @@ uint8_t *inj_build_jump(uintptr_t dstAddr, uintptr_t srcAddr, size_t *jumpSzPtr)
 }
 #endif
 
+#ifndef __arm__
 int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes){
 	csh handle;
 	cs_insn *insn;
@@ -106,14 +108,17 @@ int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes){
 		cs_close(&handle);
 		return -1;
 }
+#endif
 
 int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz){
 	int i = 0, opSz;
-	if((opSz = inj_opcode_bytes()) > 0){ //fixed opcode size
+	//if((opSz = inj_opcode_bytes()) > 0){ //fixed opcode size
+	#if defined (__arm__)
 		while(i < payloadSz)
 			i += opSz;
 		return i;
-	} else { //dynamic opcode size
+	#else
+	//} else { //dynamic opcode size
 		int totalBytes = 0;
 		int total_insn = inj_getinsn_count(codePtr, payloadSz, &totalBytes);
 		if(total_insn <= 0 || totalBytes == 0)
@@ -124,8 +129,9 @@ int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz){
 			LH_PRINT("VALID: %d  REQUIRED: %d", totalBytes, payloadSz);
 		}
 		return totalBytes;
-	}
-	return -1;
+	#endif
+	//}
+	//return -1;
 }
 
 /*

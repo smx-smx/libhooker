@@ -24,6 +24,10 @@ uintptr_t lhm_memcpy(uintptr_t dst_address, uintptr_t src_address) {
 	return (uintptr_t) memcpy((void *)dst_address, (void *)src_address, LHM_FN_COPY_BYTES);
 }
 
+void *lhm_malloc(size_t size){
+	return malloc(size);
+}
+
 void lhm_hexdump(uintptr_t address, size_t size) {
 	lh_hexdump(">> ", (void *)address, (int)size);
 }
@@ -82,6 +86,11 @@ lh_r_process_t *lh_get_procinfo(int argc, char **argv){
 	uintptr_t hdr = (uintptr_t)argv;
 
 	uint32_t hdrSz = *(uint32_t *)(hdr + (sizeof(char *) * argc));
+	LH_PRINT("hdrSz: %zu", hdrSz);
+	if(hdrSz == 0){
+		LH_PRINT("No extended header found");
+		return NULL;
+	}
 
 	lh_r_process_t *proc = (lh_r_process_t *)(hdr + hdrSz);
 	if(strncmp(proc->magic, "LHFO", sizeof(proc->magic)) != 0) //check the magic
@@ -91,7 +100,7 @@ lh_r_process_t *lh_get_procinfo(int argc, char **argv){
 	proc->prog_argv = (char **)(hdr + (sizeof(char *) * argc) + sizeof(hdrSz));*/
 
 	if(proc->lh_verbose > 3){
-		printf("hdrSz: %d\n", hdrSz);
+		LH_PRINT("hdrSz: %d\n", hdrSz);
 		lh_hexdump("hdr", proc, sizeof(*proc));
 	}
 	return proc;

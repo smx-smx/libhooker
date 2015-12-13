@@ -11,6 +11,8 @@
 #include "interface/exe/linux_elf.h"
 #include "interface/if_cpu.h"
 
+int needle_main(int argc, char *argv[]);
+
 /*
  * Any info you want to pass to the hooked process
  */
@@ -26,7 +28,9 @@ PACK(typedef struct {
 	int lh_verbose;
 	pid_t pid;
 
+	struct ld_procmaps lib;
 	char *exename;
+	char *preload_path;
 }) lh_r_process_t;
 
 typedef struct {
@@ -51,7 +55,8 @@ typedef struct {
 	uintptr_t fn_dlsym;
 } lh_session_t;
 
-#define LH_PRELOAD_SO "lh_preload.so"
+//#define LH_PRELOAD_SO "lh_preload.so"
+#define LH_PRELOAD_SO "liblh_preload.so"
 
 #define LH_LIB_MAX 128
 #define LH_MAX_ARGS 4

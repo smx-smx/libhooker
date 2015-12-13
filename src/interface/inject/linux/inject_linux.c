@@ -13,10 +13,25 @@
 //debug
 #include <time.h>
 
+#ifdef __FreeBSD__
+#include <sys/ptrace.h>
+#define PTRACE_GETREGS	PT_GETREGS
+#define PTRACE_SETREGS	PT_SETREGS
+#define PTRACE_PEEKDATA PT_READ_D
+#define PTRACE_POKEDATA PT_WRITE_D
+#define PTRACE_ATTACH	PT_ATTACH
+#define PTRACE_DETACH	PT_DETACH
+#define PTRACE_SINGLESTEP PT_STEP
+#define PTRACE_CONT	PT_CONTINUE
+#define __BSD_VISIBLE 1
+#define __WALL WAIT_MYPGRP
+#endif
+
 #include "interface/if_inject.h"
 #include "lh_module.h"
+#include "lh_common.h"
 
-#define MMAP_SIZE 0x1000 //4096 bytes
+#define MMAP_SIZE 8192
 
 /*
  *
@@ -56,9 +71,9 @@ do { \
         if (outfn) break; \
         outfn = ld_find_address(alib, fn, NULL); \
         if (outfn != 0) { \
-                LH_VERBOSE(1,"Found %s at 0x"LX" in %s",  fn, outfn, alib); \
+                LH_VERBOSE(1,"Found %s at 0x"LX" in %s",  fn, outfn, alib->pathname); \
         } else { \
-                LH_VERBOSE(1, "%s not found in %s.", fn, alib); \
+                LH_VERBOSE(1, "%s not found in %s.", fn, alib->pathname); \
         } \
 } while (0)
 	if (lh->exe_interp.name) {
@@ -91,9 +106,9 @@ do { \
 		LD_LIB_FIND_FN_ADDR("dlsym", lh->fn_dlsym, lib_dl);
 		LD_LIB_FIND_FN_ADDR("dlerror", lh->fn_dlerror, lib_dl);
 	} else {
-		LD_LIB_FIND_FN_ADDR("__libc_dlopen_mode", lh->fn_dlopen, lib_c);
-		LD_LIB_FIND_FN_ADDR("__libc_dlclose", lh->fn_dlclose, lib_c);
-		LD_LIB_FIND_FN_ADDR("__libc_dlsym", lh->fn_dlsym, lib_c);
+		LD_LIB_FIND_FN_ADDR(SYM_DLOPEN_MODE, lh->fn_dlopen, lib_c);
+		LD_LIB_FIND_FN_ADDR(SYM_DLCLOSE, lh->fn_dlclose, lib_c);
+		LD_LIB_FIND_FN_ADDR(SYM_DLSYM, lh->fn_dlsym, lib_c);
 	}
 /*
 // TODO:
@@ -122,7 +137,15 @@ static int inj_get_regs(pid_t pid, struct user *regs) {
 		return -1;
 	}
 	memset(regs, 0, sizeof(*regs));
-	if (ptrace(PTRACE_GETREGS, pid, NULL, regs) < 0) {
+	
+	int result = -1;
+	#ifdef __FreeBSD__
+	result = ptrace(PTRACE_GETREGS, pid, regs, NULL);
+	#else
+	result = ptrace(PTRACE_GETREGS, pid, NULL, regs);
+	#endif
+
+	if (result < 0) {
 		LH_ERROR_SE("Ptrace Getregs failed");
 		return -1;
 	}
@@ -135,7 +158,15 @@ static int inj_get_regs(pid_t pid, struct user *regs) {
 static int inj_set_regs(pid_t pid, const struct user *regs) {
 	if (!regs)
 		return -1;
-	if (ptrace(PTRACE_SETREGS, pid, NULL, regs) < 0) {
+
+	int result = -1;
+	#ifdef __FreeBSD__
+	result = ptrace(PTRACE_SETREGS, pid, regs, NULL);
+	#else
+	result = ptrace(PTRACE_SETREGS, pid, NULL, regs);
+	#endif
+
+	if (result < 0) {
 		LH_ERROR_SE("Ptrace Setregs failed");
 		return -1;
 	}
@@ -235,7 +266,8 @@ char *inj_strcpy_tolocal(pid_t pid, uintptr_t r_str){
 	return l_str;
 }
 
-uint8_t *inj_getcode(pid_t pid, uintptr_t codeAddr, int opcodeNum, int *validBytes){
+#ifndef __arm__
+uint8_t *inj_getcodeinj_getcode(pid_t pid, uintptr_t codeAddr, int opcodeNum, int *validBytes){
 	int _validBytes;
 	int *dst_validBytes = (validBytes == NULL) ? &_validBytes : validBytes;
 	size_t codeSz = 1;
@@ -259,6 +291,7 @@ uint8_t *inj_getcode(pid_t pid, uintptr_t codeAddr, int opcodeNum, int *validByt
 		LH_ERROR("ERROR: Cannot read at PC 0x%lx", codeAddr);
 		return NULL;
 }
+#endif
 
 static int inj_runto(pid_t pid, uintptr_t addr){
 	struct user regs;
@@ -333,8 +366,13 @@ static int inj_process(lh_session_t * lh) {
 
 		lh->is64 = HOTPATCH_EXE_IS_NEITHER;
 		if(!lh->started_by_needle){
+#ifdef __FreeBSD__
+			asprintf(&filename, "/proc/%d/file", pid);
+#else
 			asprintf(&filename, "/proc/%d/exe", pid);
+#endif
 			lh->proc.exename = readlink_safe(filename);
+			printf("FILENAME: %s\n", lh->proc.exename);
 		} else {
 			filename = lh->proc.exename;
 		}
@@ -601,15 +639,24 @@ int inj_copydata(pid_t pid, uintptr_t target, const unsigned char *data, size_t 
 	return LH_SUCCESS;
 }
 
+uintptr_t r_procmem_start = 0;
 uintptr_t inj_strcpy_alloc(lh_session_t * lh, struct user *iregs, const char *str){
 	if(!str){
 		return 0;
 	}
+
+	uintptr_t r_target = 0;
 	size_t len = strlen(str) + 1;
-	uintptr_t r_target = lh_call_func(lh, iregs, lh->fn_malloc, "malloc", len, 0);
-	if(r_target <= 0){
-		LH_ERROR("malloc failed");
-		return 0;
+
+	if(!lh->started_by_needle){
+		r_target = lh_call_func(lh, iregs, lh->fn_malloc, "malloc", len, 0);
+		if(r_target <= 0){
+			LH_ERROR("malloc failed");
+			return 0;
+		}
+	} else {
+		r_procmem_start -= len;
+		r_target = r_procmem_start;
 	}
 
 	if(inj_copydata(lh->proc.pid, r_target, (uint8_t *)str, len) != LH_SUCCESS)
@@ -626,7 +673,6 @@ uintptr_t lh_dlsym(lh_session_t * lh, struct user *iregs, char *symbolName){
 }
 
 uintptr_t lh_call_func(lh_session_t * lh, struct user *iregs, uintptr_t function, char *funcname, uintptr_t arg0, uintptr_t arg1){
-
 	errno = LH_SUCCESS;
 	// Pause the process
 
@@ -706,6 +752,14 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 
 }
 
+#define R_STRBLKSZ(lh) \
+	(sizeof(char *) * lh->proc.argc) + \
+	/* r_strBlkSz */ \
+	sizeof(uint32_t) + \
+	(sizeof(char *) * lh->proc.prog_argc) + \
+	/* exename */ \
+	sizeof(char *)
+
 lh_r_process_t *lh_rproc_gen(lh_session_t *lh){
 	lh_r_process_t *rproc = calloc(1, sizeof(lh_r_process_t));
 	strncpy(rproc->magic, "LHFO", sizeof(rproc->magic));
@@ -714,6 +768,108 @@ lh_r_process_t *lh_rproc_gen(lh_session_t *lh){
 	rproc->prog_argc = lh->proc.prog_argc;
 	rproc->lh_verbose = lh_verbose;
 	return rproc;
+}
+
+int n_alloc = 0;
+uintptr_t *r_allocs = NULL;
+
+uintptr_t inj_rproc(lh_session_t *lh, struct user *iregs){
+	uintptr_t r_procmem = 0;
+	r_allocs = calloc(sizeof(uintptr_t), lh->proc.argc + lh->proc.prog_argc + 1);
+	uintptr_t r_str;
+
+	size_t r_procSz = 0;
+	uint32_t r_strBlkSz = 0;
+
+	// Generate and copy the extra info
+	lh_r_process_t *rproc = lh_rproc_gen(lh);
+
+	r_procSz += R_STRBLKSZ(lh);
+	r_strBlkSz = r_procSz;
+
+	r_procSz += sizeof(lh_r_process_t);
+	r_procSz += r_procSz % sizeof(uintptr_t);
+
+
+/*
+	if(lh->started_by_needle){
+		uintptr_t p_main = lh_dlsym(lh, iregs, "main");
+		if(p_main <= 0){
+			LH_ERROR("FATAL: Cannot find main!");
+			return 0;
+		}
+	}
+*/
+	if(!lh->started_by_needle){
+		LH_VERBOSE(1, "Allocating " LU " bytes in the target.\n", r_procSz);
+		r_procmem = lh_call_func(lh, iregs, lh->fn_malloc, "malloc", r_procSz, 0);
+		if(r_procmem <= 0){
+			LH_ERROR("malloc failed!\n");
+			return 0;
+		}
+
+	} else {
+		struct ld_procmaps *lib_preload;
+		if (ld_find_library(lh->ld_maps, lh->ld_maps_num, lh->proc.preload_path, true, &lib_preload) != LH_SUCCESS){
+			return 0;
+		}
+		uintptr_t temp_mem = ld_find_address(lib_preload, "lh_temp_mem", NULL);
+		if(temp_mem == 0){
+			LH_ERROR("Cannot find lh_temp_mem");
+			return 0;
+		}
+		uintptr_t mem_ptr = inj_blowdata(lh->proc.pid, temp_mem, sizeof(uintptr_t));
+		r_procmem = temp_mem;
+		r_procmem_start = temp_mem + (1 * 1024 * 1024);
+	}
+	rproc->argv = (char **)r_procmem;
+
+	size_t strBlkOff = 0;
+	int i;
+
+	LH_VERBOSE(2, "Copying module arguments...");
+	for(i=0; i<lh->proc.argc; i++, strBlkOff+=sizeof(char *)){
+		LH_VERBOSE(2, "Copying module argument '%s'", lh->proc.argv[i]);
+		if((r_str = inj_strcpy_alloc(lh, iregs, lh->proc.argv[i])) == 0)
+			return 0;
+
+		r_allocs[n_alloc++] = r_str;
+		if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS){
+			return 0;
+		}
+	}
+
+	LH_VERBOSE(2, "Copying header size...");
+	if (inj_copydata(lh->proc.pid, r_procmem + strBlkOff, (uint8_t *)&(r_strBlkSz), sizeof(r_strBlkSz)) != LH_SUCCESS)
+		return 0;
+	
+	strBlkOff += sizeof(r_strBlkSz);
+
+	rproc->prog_argv = (char **)(r_procmem + strBlkOff);
+
+	LH_VERBOSE(2, "Copying program arguments...");
+	for(i=0; i<lh->proc.prog_argc; i++, strBlkOff+=sizeof(char *)){
+		LH_VERBOSE(2, "Copying program argument '%s'", lh->proc.prog_argv[i]);
+		if((r_str = inj_strcpy_alloc(lh, iregs, lh->proc.prog_argv[i])) == 0)
+			return 0;
+		r_allocs[n_alloc++] = r_str;
+		if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
+			return 0;
+	}
+
+	if((r_str = inj_strcpy_alloc(lh, iregs, lh->proc.exename)) == 0)
+		return 0;
+	r_allocs[n_alloc++] = r_str;
+	rproc->exename = (char *)(r_str);
+	if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
+		return 0;
+
+	LH_VERBOSE(2, "Copying lh_r_process_t to target...");
+	if (inj_copydata(lh->proc.pid, r_procmem + r_strBlkSz, (uint8_t *)rproc, sizeof(lh_r_process_t)) != LH_SUCCESS)
+		return 0;
+
+	free(rproc);
+	return r_procmem;
 }
 
 /*
@@ -728,9 +884,6 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 	int rc = LH_SUCCESS;
 
 	uintptr_t dlopen_handle = 0; //handle in target process of the library
-
-	// Generate and copy the extra info
-	lh_r_process_t *rproc = lh_rproc_gen(lh);
 
 	/*
 		Flag that indicates if we are hooking functions or just running code
@@ -769,6 +922,9 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 		struct user oregs;
 		struct user iregs;
 
+		uintptr_t r_procmem;
+		struct ld_procmaps *lib_to_hook;
+
 		// Get original registers from the tracked process
 		LH_VERBOSE(2, "Getting original registers.");
 		if ((rc = inj_get_regs(lh->proc.pid, &oregs)) != LH_SUCCESS)
@@ -788,86 +944,15 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				break;
 		}
 		if (rc < 0){
+			LH_ERROR("Cannot copy stack!");
 			break; //something went wrong
 		}
 
-		uintptr_t r_procmem = 0;
-		uintptr_t r_allocs[lh->proc.argc + lh->proc.prog_argc + 1], r_str = 0;
-
-		int r_alloc = 0;
-		size_t r_procSz = 0;
-		uint32_t r_strBlkSz = 0;
-
-		r_procSz += sizeof(char *) * lh->proc.argc;
-		r_procSz += sizeof(uint32_t); //to store r_strBlkSz
-		r_procSz += sizeof(char *) * lh->proc.prog_argc;
-		r_procSz += sizeof(char *); //exename
-
-		r_strBlkSz = r_procSz;
-		r_procSz += sizeof(lh_r_process_t);
-		r_procSz += r_procSz % sizeof(uintptr_t);
-
-		if(lh->started_by_needle){
-			uintptr_t p_main = lh_dlsym(lh, &iregs, "main");
-			if(p_main <= 0){
-				LH_ERROR("FATAL: Cannot find main!");
-				return -1;
-			}
-		}
-
-		LH_VERBOSE(1, "Allocating " LU " bytes in the target.\n", r_procSz);
-		r_procmem = result = lh_call_func(lh, &iregs, lh->fn_malloc, "malloc", r_procSz, 0);
-		if(result <= 0){
-			LH_ERROR("malloc failed!\n");
+		r_procmem = inj_rproc(lh, &iregs);
+		if(r_procmem == 0){
+			LH_ERROR("Couldn't inject remote payload");
 			break;
 		}
-
-		rproc->argv = (char **)r_procmem;
-
-		size_t strBlkOff = 0;
-		int i;
-
-		LH_VERBOSE(2, "Copying module arguments...");
-		for(i=0; i<lh->proc.argc; i++, strBlkOff+=sizeof(char *)){
-			LH_VERBOSE(2, "Copying module argument '%s'", lh->proc.argv[i]);
-			if((r_str = inj_strcpy_alloc(lh, &iregs, lh->proc.argv[i])) == 0)
-				break;
-			r_allocs[r_alloc++] = r_str;
-			if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS){
-				break;
-			}
-		}
-
-		LH_VERBOSE(2, "Copying header size...");
-		if ((rc = inj_copydata(lh->proc.pid, r_procmem + strBlkOff, (uint8_t *)&(r_strBlkSz), sizeof(r_strBlkSz))) != LH_SUCCESS)
-			break;
-		strBlkOff += sizeof(r_strBlkSz);
-
-		rproc->prog_argv = (char **)(r_procmem + strBlkOff);
-
-		LH_VERBOSE(2, "Copying program arguments...");
-		for(i=0; i<lh->proc.prog_argc; i++, strBlkOff+=sizeof(char *)){
-			LH_VERBOSE(2, "Copying program argument '%s'", lh->proc.prog_argv[i]);
-			if((r_str = inj_strcpy_alloc(lh, &iregs, lh->proc.prog_argv[i])) == 0)
-				break;
-			r_allocs[r_alloc++] = r_str;
-			if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
-				break;
-		}
-
-		if((r_str = inj_strcpy_alloc(lh, &iregs, lh->proc.exename)) == 0)
-			break;
-		r_allocs[r_alloc++] = r_str;
-		rproc->exename = (char *)(r_str);
-		if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
-			break;
-
-
-		LH_VERBOSE(2, "Copying lh_r_process_t to target...");
-		if ((rc = inj_copydata(lh->proc.pid, r_procmem + r_strBlkSz, (uint8_t *)rproc, sizeof(lh_r_process_t))) != LH_SUCCESS)
-			break;
-
-		free(rproc);
 
 		// Call dlopen and get result
 		dlopen_handle = lh_call_func(lh, &iregs, lh->fn_dlopen, "dlopen", r_allocs[0], (RTLD_LAZY | RTLD_GLOBAL));
@@ -886,8 +971,10 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 			lh_dump_regs(&iregs);
 			break;
 		}
-		if (out_libaddr)
+
+		if (out_libaddr){
 			*out_libaddr = dlopen_handle;
+		}
 
 
 		/*
@@ -947,17 +1034,19 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 				LH_VERBOSE(2, "returned: %d", (int)result);
 
-				LH_VERBOSE(2, "Freeing args and info...");
-				lh_call_func(lh, &iregs, lh->fn_free, "free", r_procmem, 0);
-
-				for(i=0; i<r_alloc; i++){
-					lh_call_func(lh, &iregs, lh->fn_free, "free", r_allocs[i], 0);
-				}
-
 				if (result != LH_SUCCESS) {
 					LH_VERBOSE(1, "Not continuing, autoinit_pre is not successful");
 					break;
 				}
+			}
+
+			if(hook_settings->hook_mode == LHM_HOOK_USER){
+				uintptr_t lhm_hook = ld_find_address(lib_just_loaded, "lhm_hook", NULL);
+				if(lhm_hook == 0){
+					LH_ERROR("lhm_hook not found");
+					break;
+				}
+				goto hook_end;
 			}
 
 			/*
@@ -1010,7 +1099,6 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				LH_VERBOSE(3, "The replacement function: " LX, fnh->hook_fn);
 
 				// Locate the library specified in the hook section (if any)
-				struct ld_procmaps *lib_to_hook;
 				if (ld_find_library(lh->ld_maps, lh->ld_maps_num, fnh->libname, false, &lib_to_hook) != LH_SUCCESS) {
 					LH_ERROR("Couldn't find the requested library in /proc/<pid>/maps");
 					break;
@@ -1174,8 +1262,10 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 			//If the hook succeded and the used defined a post hook function, call it
 			if (hook_successful && hook_settings->autoinit_post != 0){
+				//int inj_copydata(pid_t pid, uintptr_t target, const unsigned char *data, size_t datasz) {
+				inj_copydata(lh->proc.pid, r_procmem + + R_STRBLKSZ(lh) + offsetof(lh_r_process_t, lib), (uint8_t *)lib_to_hook, sizeof(*lib_to_hook));
 				LH_VERBOSE(2, "Calling autoinit_post " LX, hook_settings->autoinit_post);
-				lh_call_func(lh, &iregs, (uintptr_t) hook_settings->autoinit_post, "autoinit_post", r_procmem + r_strBlkSz, 0);
+				lh_call_func(lh, &iregs, (uintptr_t) hook_settings->autoinit_post, "autoinit_post", r_procmem + R_STRBLKSZ(lh), 0);
 				if(errno) break;
 			}
 
@@ -1183,6 +1273,14 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 		} while (0);
 
 		if(oneshot){
+			LH_VERBOSE(2, "Freeing args and info...");
+			lh_call_func(lh, &iregs, lh->fn_free, "free", r_procmem, 0);
+
+			int i;
+			for(i=0; i<n_alloc; i++){
+				lh_call_func(lh, &iregs, lh->fn_free, "free", r_allocs[i], 0);
+			}
+
 			LH_VERBOSE(1, "Freeing library handle " LX, dlopen_handle);
 			result = lh_call_func(lh, &iregs, lh->fn_dlclose, "dlclose", dlopen_handle, 0);
 			if(errno) break;
@@ -1190,6 +1288,9 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 				LH_ERROR("dlclose() failed!\n");
 			}
 		}
+
+	hook_end:
+		free(r_allocs);
 
 		// Cleanup part
 		// Restore the original registers
@@ -1204,6 +1305,11 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 								   + idx * sizeof(size_t), stack[idx])) < 0)
 				break;
 		}
+
+		if(lh->started_by_needle){
+			inj_exec(lh->proc.pid);
+		}
+
 		if (rc < 0)
 			break;
 	} while (0);

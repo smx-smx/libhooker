@@ -6,7 +6,7 @@
 #include <stdarg.h>
 #include <ctype.h>
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__FreeBSD__)
 #include <sched.h>
 #include <signal.h>
 #include <sys/resource.h>
@@ -52,7 +52,6 @@ int print_usage_and_quit(const char *errfmt, ...) {
 }
 
 int parse_opts(int argc, char *argv[]) {
-
 	if (argc == 1)
 		return print_usage_and_quit(NULL);
 
@@ -84,6 +83,7 @@ int parse_opts(int argc, char *argv[]) {
 	if (argc == optind)
 		return print_usage_and_quit("Missing pid or path to executable to run!");
 
+
 	pid_t pid_val = atoi(argv[optind]);
 	if (pid_val <= 0){
 		g_optind_exe = optind;
@@ -91,6 +91,11 @@ int parse_opts(int argc, char *argv[]) {
 		g_pid = pid_val;
 	}
 	optind++;
+
+#ifdef LH_PRELOAD
+	g_pid = getpid();
+	g_optind_exe = 0;
+#endif
 
 	if (argc == optind)
 		return print_usage_and_quit("no libraries specified");
@@ -100,31 +105,49 @@ int parse_opts(int argc, char *argv[]) {
 	return LH_SUCCESS;
 }
 
+char *preload_path = NULL;
 int runProc(void *arg){
 	char **argv = (char **)arg;
-	#if 0
+
+	#define LH_USE_PRELOAD
+	//#ifdef LH_USE_PRELOAD
+	#if 1
 
 	if(g_uid > -1)
 		setresuid(g_uid, g_uid, g_uid);
 	if(g_gid > -1)
 		setresgid(g_gid, g_gid, g_gid);
 
-	if(access(LH_PRELOAD_SO, F_OK) < 0){
-		LH_ERROR("ERROR: %s missing, cannot continue!", LH_PRELOAD_SO);
-	}
+	char *env_preload;
+	asprintf(&env_preload, "LD_PRELOAD=%s", preload_path);
+
+	LH_PRINT("LD_PRELOAD => '%s'", env_preload);
 
 	//constant pointer to char array
 	char * const envp[] = {
-		"LD_PRELOAD=./"LH_PRELOAD_SO,
+		env_preload,
 		NULL
 	};
 
 	int ret = execve(argv[0], argv, envp);
+	free(env_preload);
 
 	#else
 
-	int ret = execv(argv[0], argv);
-	if(ret < 0){
+	pid_t ignored_pid;
+	void *ignored_ptr;
+	ptrace(PTRACE_TRACEME, ignored_pid, ignored_ptr, ignored_ptr);
+
+	int ret;
+	if((ret = setsid()) < 0) { //failed to become session leader
+		LH_ERROR_SE("setsid");
+		return ret;
+	}
+	setpgid(0, 0);
+	signal(SIGCHLD, SIG_IGN);
+	signal(SIGHUP, SIG_IGN);
+
+	if((ret = execv(argv[0], argv)) < 0){
 		LH_ERROR_SE("execv");
 		return ret;
 	}
@@ -133,7 +156,17 @@ int runProc(void *arg){
 	return ret;
 }
 
-int main(int argc, char *argv[]) {
+#ifndef LH_PRELOAD
+int main(int argc, char *argv[]){
+	return needle_main(argc, argv);
+}
+#endif
+
+int needle_main(int argc, char *argv[]) {
+	int i;
+	for(i=0; i<argc; i++){
+		printf("NEEDLE[%u] => %s\n", i, argv[i]);
+	}
 	int re = LH_SUCCESS;
 
 	char **prog_argv = NULL;
@@ -193,14 +226,34 @@ int main(int argc, char *argv[]) {
 					return EXIT_FAILURE;
 				}
 
-				void *stack_start = (void *)((uintptr_t)stack_end + rl.rlim_cur); //stack grows downwards
+				void *stack_start = (void *)(((uintptr_t)stack_end) + rl.rlim_cur); //stack grows downwards
+
+				char *needle_exe  = readlink_safe("/proc/self/exe");
+				char *needle_dirn = lh_dirname(needle_exe);
+				asprintf(&preload_path, "%s/"LH_PRELOAD_SO, needle_dirn);
+				free(needle_exe); free(needle_dirn);
+
+				if(access(preload_path, F_OK) < 0){
+					LH_ERROR("ERROR: '%s' missing, cannot continue!", preload_path);
+					return EXIT_FAILURE;
+				}
 
 				LH_PRINT("Launching executable '%s'", argv[g_optind_exe]);
+				#if 0
 				if((g_pid = clone(runProc, stack_start, CLONE_VFORK, prog_argv)) < 0){
 					LH_ERROR_SE("clone");
 					free(stack_end);
 					return EXIT_FAILURE;
 				}
+				#else
+				if((g_pid = fork()) < 0){
+					LH_ERROR_SE("fork");
+					return EXIT_FAILURE;
+				} else if(g_pid == 0){
+					runProc(prog_argv);
+				}
+				#endif
+				session->proc.preload_path = preload_path;
 				LH_PRINT("Process launched! PID: %d", g_pid);
 
 				session->proc.exename = strdup(prog_argv[0]);
@@ -216,12 +269,14 @@ int main(int argc, char *argv[]) {
 		}*/
 
 		//start tracking the pid specified by the user
+
 		if (LH_SUCCESS != (re = lh_attach(session, g_pid)))
 			break;
 
+
 		//obtain the current tty name
 		//TODO: handle pipes (could use FIFOs)
-		char *cur_tty = readlink_safe("/proc/self/fd/0");
+		char *cur_tty = ttyname(0);
 		if(!cur_tty){
 			return EXIT_FAILURE;
 		}
@@ -243,8 +298,6 @@ int main(int argc, char *argv[]) {
 		mod_argv[argp++] = strdup(libpath);
 		mod_argv[argp++] = strdup(cur_tty);
 
-		free(cur_tty);
-
 		int i;
 		for (i = g_optind_lib + 1; i < argc; i++) {
 			//read any extra argument passed on the command line
@@ -255,62 +308,59 @@ int main(int argc, char *argv[]) {
 		session->proc.argc = argp;
 		session->proc.argv = mod_argv;
 
+		//crate and prepare memory for hooked program arguments
+		char *cmdline;
 
-		if(!session->started_by_needle){
-			//crate and prepare memory for hooked program arguments
-			char *cmdline;
+		argp = 0;
+		do {
+			FILE *pargs;
+			asprintf(&cmdline, "/proc/%d/cmdline", g_pid);
+			pargs = fopen(cmdline, "r");
+			if(!pargs){
+				LH_ERROR("Cannot open '%s' for reading, ignoring program args...", cmdline);
+				break;
+			}
+			free(cmdline);
 
-			argp = 0;
-			do {
-				FILE *pargs;
-				asprintf(&cmdline, "/proc/%d/cmdline", g_pid);
-				pargs = fopen(cmdline, "r");
-				if(!pargs){
-					LH_ERROR("Cannot open '%s' for reading, ignoring program args...", cmdline);
+			int ch;
+			char *arg;
+			while(1){
+				if((ch=fgetc(pargs)) == EOF || feof(pargs)){
 					break;
 				}
-				free(cmdline);
+				if(ch == 0x00){
+					argp++;
+				}
+			}
+			rewind(pargs);
+			printf("Allocating %d args\n", argp);
+			char **prog_argv = calloc(1, sizeof(char *) * argp);
 
-				char ch;
-				char *arg;
-				while(1){
-					if((ch=fgetc(pargs)) == EOF || feof(pargs)){
+			int argSz = 0;
+			int argc = 0;
+			while(1){
+				if((ch=fgetc(pargs)) == EOF || feof(pargs)){
+					break;
+				}
+				argSz++;
+				if(ch == 0x00){
+					if(argc > argp){
+						LH_ERROR("ERROR: Unexpected overflow of program arguments!");
 						break;
 					}
-					if(ch == 0x00){
-						argp++;
-					}
+					fseek(pargs, -argSz, SEEK_CUR);
+					arg = calloc(1, argSz);
+					fread(arg, argSz, 1, pargs);
+					argSz = 0;
+					prog_argv[argc++] = arg;
 				}
-				rewind(pargs);
-				printf("Allocating %d args\n", argp);
-				char **prog_argv = calloc(1, sizeof(char *) * argp);
-
-				int argSz = 0;
-				int argc = 0;
-				while(1){
-					if((ch=fgetc(pargs)) == EOF || feof(pargs)){
-						break;
-					}
-					argSz++;
-					if(ch == 0x00){
-						if(argc > argp){
-							LH_ERROR("ERROR: Unexpected overflow of program arguments!");
-							break;
-						}
-						fseek(pargs, -argSz, SEEK_CUR);
-						arg = calloc(1, argSz);
-						fread(arg, argSz, 1, pargs);
-						argSz = 0;
-						prog_argv[argc++] = arg;
-					}
-				}
+			}
 
 
-				fclose(pargs);
-				session->proc.prog_argc = argp;
-				session->proc.prog_argv = prog_argv;
-			} while(0);
-		}
+			fclose(pargs);
+			session->proc.prog_argc = argp;
+			session->proc.prog_argv = prog_argv;
+		} while(0);
 
 		for(argp=0; argp<session->proc.prog_argc; argp++)
 			printf("ProgArg %d => %s\n", argp, session->proc.prog_argv[argp]);

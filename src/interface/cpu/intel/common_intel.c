@@ -67,6 +67,7 @@ int inj_relocate_code(uint8_t *codePtr, size_t codeSz, uintptr_t sourcePC, uintp
 						const char *reg_name = cs_reg_name(handle, op->mem.base);
 						printf("\t\t\toperands["LU"].mem.base: REG = %s\n", j, reg_name);
 						if(!strcmp(reg_name, (char *)&pcRegName)){
+							//apparently works for cmp, lea, anything mem relative hopefully
 							//if(!strcmp(insn->mnemonic, "cmp")){
 								uint displacement = (sourcePC + insn->size) - destPC;
 								if(lh_verbose >= 3){

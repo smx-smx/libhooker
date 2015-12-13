@@ -215,8 +215,14 @@ struct ld_procmaps *ld_load_maps(pid_t pid, size_t * num) {
 		LH_PRINT("Invalid PID: %d", pid);
 		return NULL;
 	}
+#ifdef __FreeBSD__
+	// This is hacky we should do native BSD /proc/xx/map
+	snprintf(filename, PATH_MAX, "/compat/linux/proc/%d/maps", pid);
+	snprintf(appname, PATH_MAX, "/proc/%d/file", pid);
+#else
 	snprintf(filename, PATH_MAX, "/proc/%d/maps", pid);
 	snprintf(appname, PATH_MAX, "/proc/%d/exe", pid);
+#endif
 	LH_VERBOSE(2, "Using Proc Maps from %s", filename);
 	LH_VERBOSE(2, "Using Proc Exe from %s", appname);
 
@@ -312,6 +318,7 @@ int ld_find_library(struct ld_procmaps *maps, const size_t mapnum, const char *l
 			const struct ld_procmaps *pm = &maps[idx];
 			if (!pm->pathname)
 				continue;
+
 			/* first try inode match. the libraries can be symlinks and
 			 * all that
 			 */
@@ -342,12 +349,14 @@ int ld_find_library(struct ld_procmaps *maps, const size_t mapnum, const char *l
 				} else {
 					if (pm->inode == 0)
 						continue;
-					if ((pm->filetype != PROCMAPS_FILETYPE_LIB) && (pm->filetype != PROCMAPS_FILETYPE_EXE))
-						continue;
+					//if ((pm->filetype != PROCMAPS_FILETYPE_LIB) && (pm->filetype != PROCMAPS_FILETYPE_EXE))
+					//	continue;
+
 					/* we're doing an exact match */
 					if (exact_match) {
 						found = strcmp(libpath, pm->pathname) == 0 ? true : false;
 					} else {
+
 						/* do a substring match for best fit. If the string
 						 * matches then check if the next character is not an
 						 * alphabet and is a . or a -

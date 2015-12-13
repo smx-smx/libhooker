@@ -10,6 +10,23 @@
 
 int lh_verbose = 0;
 
+
+char *lh_basename(const char *path){
+	char *cpy = strdup(path);
+	char *ret = basename(cpy);
+	ret = strdup(ret);
+	free(cpy);
+	return ret;
+}
+
+char *lh_dirname(const char *path){
+	char *cpy = strdup(path);
+	char *ret = dirname(cpy);
+	ret = strdup(ret);
+	free(cpy);
+	return ret;
+}
+
 void lh_print(int verbose, int newline, char *fn, int lineno, const char *fmt, ...) {
 
 #ifndef DEBUG

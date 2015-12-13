@@ -46,7 +46,7 @@ solution "libhooker"
 		}
 		pic "on"
 		buildoptions {
-			"-Wall"
+			--"-Wall"
 		}
 
 
@@ -149,11 +149,17 @@ solution "libhooker"
 
 	project "lh_preload"
 		kind "SharedLib"
-		files {
-			"src/interface/inject/linux/inject_preload.c"
+		defines {
+			"LH_PRELOAD"
 		}
-		-- links { "dl", "lh_common" }
-		links { "lh_common" }
+		files {
+			"src/needle/needle.c",
+			"src/interface/inject/linux/inject_preload.c",
+			"src/interface/inject/linux/inject_linux.c",
+			"src/interface/exe/elf/*.c"
+		}
+		links { "dl", "lh_common" }
+		lh_injmod()
 
 	group "Modules"
 		project "lhm_sample"

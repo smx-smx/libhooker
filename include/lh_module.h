@@ -21,6 +21,11 @@ enum {
 	LHM_FN_HOOK_BY_AOBSCAN
 };
 
+enum {
+	LHM_HOOK_KERNEL = 0,
+	LHM_HOOK_USER = 1
+};
+
 /*
  * Function hook definition
  */
@@ -35,7 +40,7 @@ typedef struct {
 	uintptr_t code_rest_ptr;
 	size_t opcode_bytes_to_restore;
 	size_t aob_size;
-	char *aob_pattern;
+	unsigned char *aob_pattern;
 } lh_fn_hook_t;
 
 /*
@@ -43,6 +48,7 @@ typedef struct {
  */
 typedef struct {
 	int version;
+	int hook_mode;
 	int (*autoinit_pre) (int argc, char **argv);
 	void (*autoinit_post) (lh_r_process_t *);
 	lh_fn_hook_t fn_hooks[LHM_MAX_FN_HOOKS];

@@ -142,6 +142,32 @@ static int exe_elf_identify(unsigned char *e_ident, size_t size) {
 					islinux = 1;
 					LH_VERBOSE(3, "OS ABI is Linux.");
 				}
+				if (e_ident[EI_OSABI] == ELFOSABI_FREEBSD) {
+					islinux = 1;
+					LH_VERBOSE(3, "OS ABI is FreeBSD.");
+				}
+				if (e_ident[EI_OSABI] == ELFOSABI_OPENBSD) {
+					islinux = 1;
+					LH_VERBOSE(3, "OS ABI is OpenBSD.");
+				}
+				if (e_ident[EI_OSABI] == ELFOSABI_NETBSD) {
+					islinux = 1;
+					LH_VERBOSE(3, "OS ABI is NetBSD.");
+				}
+				if (e_ident[EI_OSABI] == ELFOSABI_ARM) {
+					islinux = 1;
+					LH_VERBOSE(3, "OS ABI is ARM.");
+				}
+				#ifdef __FreeBSD__
+				if (e_ident[EI_OSABI] == ELFOSABI_AROS) {
+					islinux = 1;
+					LH_VERBOSE(3, "OS ABI is Amiga Research OS.");
+				}
+				#endif
+				if (e_ident[EI_OSABI] == ELFOSABI_SOLARIS) {
+					islinux = 1;
+					LH_VERBOSE(3, "OS ABI is SunOS/Solaris.");
+				}
 				if (islinux && isbigendian == 0 && iscurrent) {
 					return is64;
 				}

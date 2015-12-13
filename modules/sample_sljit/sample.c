@@ -20,7 +20,7 @@ void installHooks(){
 	f(1, "test");
 	*/
 
-	void *origCode = inj_build_payload_user(&(hook_settings.fn_hooks[1]), (uintptr_t)original_test_function);
+	void *origCode = inj_build_payload_user(&(hook_settings.fn_hooks[1]), (uintptr_t)original_test_function, NULL);
 	if(!origCode){
 		LH_ERROR("Cannot build the payload!");
 		return;
@@ -28,8 +28,8 @@ void installHooks(){
 
 	compiler = sljit_create_compiler(NULL);
 	if(!compiler){
-			LH_ERROR("Unable to create sljit compiler instance");
-			return;
+		LH_ERROR("Unable to create sljit compiler instance");
+		return;
 	}
 
 	/*

@@ -86,7 +86,10 @@ int inj_trap_bytes();
 int inj_opcode_bytes();
 int inj_absjmp_opcode_bytes();
 int inj_reljmp_opcode_bytes();
+
+#ifndef __arm__
 int inj_getinsn_count(uint8_t *buf, size_t sz, int *validbytes);
+#endif
 
 int inj_build_trap(uint8_t *buffer);
 int inj_build_rel_jump(uint8_t *buffer, uintptr_t jump_destination, uintptr_t jump_opcode_address);

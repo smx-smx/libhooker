@@ -12,6 +12,7 @@ int lh_stdout_getcurrent();
 void lh_stdout_set(int fd);
 void lh_vaprintf(const char *fmt, va_list ap);
 void lhm_hexdump(uintptr_t address, size_t size);
+void *lhm_malloc(size_t size);
 uintptr_t lhm_memcpy(uintptr_t dst_address, uintptr_t src_address);
 uintptr_t lhm_mmap(uintptr_t address, size_t size);
 int lhm_munmap(uintptr_t address, size_t size);

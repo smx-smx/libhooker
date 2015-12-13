@@ -31,6 +31,9 @@ extern int lh_verbose;
 void lh_print(int verbose, int newline, char *fn, int lineno, const char *fmt, ...);
 void lh_hexdump(char *desc, void *addr, int len);
 
+char *lh_basename(const char *path);
+char *lh_dirname(const char *path);
+
 char *readlink_safe(char *path);
 
 #    define WHEREARG  __FILE__, __LINE__
@@ -49,5 +52,15 @@ char *readlink_safe(char *path);
 #        define LLX "%llx"
 #        define LU "%u"
 #    endif
+
+#ifdef __FreeBSD__
+#define SYM_DLCLOSE	"dlclose"
+#define SYM_DLOPEN_MODE	"_rtld_is_dlopened"
+#define SYM_DLSYM	"dlsym"
+#else
+#define SYM_DLCLOSE	"__libc_dlclose"
+#define SYM_DLOPEN_MODE	"__libc_dlopen_mode"
+#define SYM_DLSYM	"__libc_dlsym"
+#endif
 
 #endif
