@@ -6,6 +6,8 @@
 #include "lh_module.h"
 #include "interface/inject_types.h"
 
+#define ALIGN(sizeToAlign, alignment) (((sizeToAlign) + (alignment) - 1) & ~((alignment) - 1))
+
 //Temporary interface definition
 void *inj_blowdata(pid_t pid, uintptr_t src_in_remote, size_t datasz);
 int inj_copydata(pid_t pid, uintptr_t target, const unsigned char *data, size_t datasz);

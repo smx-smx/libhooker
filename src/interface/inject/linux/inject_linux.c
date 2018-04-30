@@ -219,7 +219,9 @@ int inj_peekdata(pid_t pid, uintptr_t src_in_remote, uintptr_t *outpeek) {
  * Allocates and returns a pointer to memory containing the read data
  */
 void *inj_blowdata(pid_t pid, uintptr_t src_in_remote, size_t datasz) {
-	void *re = malloc(datasz);
+	datasz = ALIGN(datasz, sizeof(uintptr_t));
+
+	void *re = calloc(1, datasz);
 	if (re != NULL) {
 
 		uintptr_t *a = (uintptr_t *) re;
@@ -569,7 +571,7 @@ int lh_detach(lh_session_t * session) {
  * - Waits till the step is complete
  * - Gets the new registers values
  *
- * The "fn" field is actually unused
+ * The "fn" argument is actually unused (only for debug printf)
  */
 int inj_setexecwaitget(lh_session_t * lh, const char *fn, struct user *iregs) {
 	int rc = LH_SUCCESS;
@@ -590,12 +592,13 @@ int inj_setexecwaitget(lh_session_t * lh, const char *fn, struct user *iregs) {
 			break;
 		}
 		/*
-			Since this is a jump and not a proper call, and we don't want to bother with stack frames,
-			we need to restore the previous values after the call has been executed.
-			This is crucial to avoid stack corruption and stack overflow, because by not calling pop outselves, the caller can receive unexpected values and crash
+			We now need to restore the previous stack pointer.
+			This is essential if the calling convention used by the target platform assumes caller cleanup (e.g ARM)
+			Failing to do so will result in a stack corruption which might go unnoticed until a sudden crash of the target process
 		*/
 		LH_VERBOSE(3, "Restoring stack pointer...");
 		lh_rset_sp(iregs, prev_sp);
+		// We also restore FP just to be sure, but it shouldn't be required
 		LH_VERBOSE(3, "Restoring stack frame...");
 		lh_rset_fp(iregs, prev_fp);
 	} while (0);
@@ -937,6 +940,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 		lh_rset_sp(&iregs, lh_rget_sp(&iregs) - lh_redzone());
 		LH_VERBOSE(2, "Copying stack out.");
 
+		// Save up to LH_MAX_ARGS words (we'll trash them so we need to restore them later)
 		for (idx = 0; idx < sizeof(stack) / sizeof(uintptr_t); ++idx) {
 			if ((rc = inj_peekdata(lh->proc.pid, lh_rget_sp(&iregs) + (idx * sizeof(uintptr_t)), &stack[idx])) != LH_SUCCESS)
 				break;
@@ -957,16 +961,18 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 		// Call dlopen and get result
 		dlopen_handle = lh_call_func(lh, &iregs, lh->fn_dlopen, "dlopen", r_allocs[0], (RTLD_LAZY | RTLD_GLOBAL));
 		LH_VERBOSE(1, "library opened at 0x" LX, dlopen_handle);
-		if(!dlopen_handle || errno){
-			if(lh->fn_dlerror){
-				uintptr_t r_str = lh_call_func(lh, &iregs, lh->fn_dlerror, "dlerror", (uintptr_t)NULL, (uintptr_t)NULL);
-				char *l_str = inj_strcpy_tolocal(lh->proc.pid, r_str);
-				if(!l_str){
-					LH_ERROR("dlerror failed!");
-				} else {
-					LH_PRINT("dlerror(): %s", l_str);
-				}
+
+		if(lh->fn_dlerror){
+			uintptr_t r_str = lh_call_func(lh, &iregs, lh->fn_dlerror, "dlerror", (uintptr_t)NULL, (uintptr_t)NULL);
+			char *l_str = inj_strcpy_tolocal(lh->proc.pid, r_str);
+			if(l_str == NULL){
+				LH_PRINT("dlerror(): no error");
+			} else {
+				LH_PRINT("dlerror(): %s", l_str);
 			}
+		}
+
+		if(!dlopen_handle || errno){
 			LH_ERROR("dlopen failed!");
 			lh_dump_regs(&iregs);
 			break;
@@ -978,7 +984,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 
 		/*
-			Verify that the library load succeded by probing /proc/<pid>/maps,
+			Verify that the library has been loaded succesfully by probing /proc/<pid>/maps,
 			<pid> is the pid of the process we're tracking
 		*/
 		do {
@@ -997,7 +1003,6 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 			/*
 				We're now going to check the existance of the hook_settings structure by looking for its symbol
 			*/
-
 			LH_VERBOSE(2, "We found the library just loaded");
 			size_t size;
 			uintptr_t outfn = ld_find_address(lib_just_loaded, "hook_settings", &size);
@@ -1010,7 +1015,7 @@ int lh_inject_library(lh_session_t * lh, const char *dllPath, uintptr_t *out_lib
 
 			lh_hook_t *hook_settings = (lh_hook_t *) inj_blowdata(lh->proc.pid, outfn, size);
 			if (hook_settings == NULL) {
-				LH_ERROR("Couldnt retrieve hook_settings symbol");
+				LH_ERROR("Couldn't retrieve hook_settings symbol");
 				break;
 			}
 
