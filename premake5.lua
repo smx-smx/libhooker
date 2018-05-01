@@ -3,7 +3,7 @@ function lh_basemod()
 end
 
 function lh_injmod()
-	links { "lh_common", "lh_basemod", "lh_injmod", "lh_ifcpu", "capstone" }
+	links { "lh_common", "lh_basemod", "lh_injmod", "lh_ifcpu", } --"capstone" }
 end
 
 function lh_lgmod()
