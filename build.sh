@@ -249,7 +249,7 @@ if [ -z $CONF_ARCH ]; then
 			;;
 		armv7*)
 			ok "arm v7 detected"
-			CONF_ARCH="auto"
+			CONF_ARCH="armv7"
 			;;
 		*)
 			warn "Couldn't detect machine, trying AUTO 	detection..."
