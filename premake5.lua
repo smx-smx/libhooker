@@ -46,6 +46,7 @@ solution "libhooker"
 		}
 		pic "on"
 		buildoptions {
+			"-std=c99"
 			--"-Wall"
 		}
 
@@ -158,7 +159,14 @@ solution "libhooker"
 			"src/interface/inject/linux/inject_linux.c",
 			"src/interface/exe/elf/*.c"
 		}
-		links { "dl", "lh_common", "capstone" }
+
+		filter "configurations:i386"
+			links { "capstone" }
+
+		filter "configurations:x86_64"
+			links { "capstone" }		
+
+		links { "dl", "lh_common" }
 		lh_injmod()
 
 	group "Modules"
