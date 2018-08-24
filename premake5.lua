@@ -124,7 +124,7 @@ solution "libhooker"
 		links { "lh_common", "lh_ifcpu", "lh_sljit" }
 
 		files {
-			"src/needle/*.c"
+			"src/needle/needle.c"
 		}
 
 		filter "configurations:i386"
@@ -158,7 +158,7 @@ solution "libhooker"
 			"src/interface/inject/linux/inject_linux.c",
 			"src/interface/exe/elf/*.c"
 		}
-		links { "dl", "lh_common" }
+		links { "dl", "lh_common", "capstone" }
 		lh_injmod()
 
 	group "Modules"

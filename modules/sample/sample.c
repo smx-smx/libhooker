@@ -37,15 +37,20 @@ int hooked_autoinit(int argc, char **argv) {
 	LH_PRINT("");
 	LH_PRINT("");
 	LH_PRINT("This function is intended to autorun at each time being injected to an executable.");
-	LH_PRINT("At this time, we were injected into: %u (%s)", proc->pid, proc->prog_argv[0]);
+	if(proc){
+		LH_PRINT("At this time, we were injected into: %u (%s)", proc->pid, proc->prog_argv[0]);
+	}
 	LH_PRINT("TTY: %s", argv[1]);
 	LH_PRINT("Arguments: %d", argc);
 	int i;
 	for(i=0; i<argc; i++)
 		LH_PRINT("ModArg %d => %s", i, argv[i]);
-	for(i=0; i<proc->prog_argc; i++)
-		LH_PRINT("ProgArg %d => %s", i, proc->prog_argv[i]);
-	LH_PRINT("exe path => %s", proc->exename);
+	if(proc){
+		for(i=0; i<proc->prog_argc; i++){
+			LH_PRINT("ProgArg %d => %s", i, proc->prog_argv[i]);
+		}
+		LH_PRINT("exe path => %s", proc->exename);
+	}	
 	LH_PRINT("");
 	LH_PRINT("");
 	LH_PRINT("");

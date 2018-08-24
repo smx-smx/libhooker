@@ -15,6 +15,7 @@ int inj_inject_library(const char *dllPath, int argc, char *argv[], void **out_l
 		bool oneshot = true;
 		struct ld_procmaps *lib_to_hook = NULL;
 
+		LH_PRINT("dlopen '%s'", dllPath);
 		void *handle = dlopen(dllPath, RTLD_LAZY | RTLD_GLOBAL);
 		if(!handle){
 			LH_ERROR_SE("dlopen failed!");

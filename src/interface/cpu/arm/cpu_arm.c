@@ -158,11 +158,11 @@ int inj_build_rel_jump(uint8_t* buffer, uintptr_t jump_destination, uintptr_t ju
 }
 */
 
-inline void lh_rset_lr(struct user *r, uintptr_t value) {
+void lh_rset_lr(struct user *r, uintptr_t value) {
 	r->regs.uregs[14] = value;
 }
 
-inline uintptr_t lh_rget_lr(struct user *r) {
+uintptr_t lh_rget_lr(struct user *r) {
 	return r->regs.uregs[14];
 }
 

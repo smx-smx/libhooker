@@ -84,7 +84,7 @@ int lh_get_stdout(char *tty){
 
 lh_r_process_t *lh_get_procinfo(int argc, char **argv){
 	uintptr_t hdr = (uintptr_t)argv;
-
+	
 	uint32_t hdrSz = *(uint32_t *)(hdr + (sizeof(char *) * argc));
 	LH_PRINT("hdrSz: %zu", hdrSz);
 	if(hdrSz == 0){

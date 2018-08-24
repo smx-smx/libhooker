@@ -10,6 +10,7 @@
 #include <sched.h>
 #include <signal.h>
 #include <sys/resource.h>
+#include <math.h>
 #endif
 
 #include "interface/if_inject.h"
@@ -105,21 +106,14 @@ int parse_opts(int argc, char *argv[]) {
 	return LH_SUCCESS;
 }
 
-char *preload_path = NULL;
+char *g_preload_path = NULL;
 int runProc(void *arg){
 	char **argv = (char **)arg;
 
-	#define LH_USE_PRELOAD
-	//#ifdef LH_USE_PRELOAD
-	#if 1
-
-	if(g_uid > -1)
-		setresuid(g_uid, g_uid, g_uid);
-	if(g_gid > -1)
-		setresgid(g_gid, g_gid, g_gid);
+	int ret;
 
 	char *env_preload;
-	asprintf(&env_preload, "LD_PRELOAD=%s", preload_path);
+	asprintf(&env_preload, "LD_PRELOAD=%s", g_preload_path);
 
 	LH_PRINT("LD_PRELOAD => '%s'", env_preload);
 
@@ -128,39 +122,20 @@ int runProc(void *arg){
 		env_preload,
 		NULL
 	};
-
-	int ret = execve(argv[0], argv, envp);
-	free(env_preload);
-
-	#else
-
-	pid_t ignored_pid;
-	void *ignored_ptr;
-	ptrace(PTRACE_TRACEME, ignored_pid, ignored_ptr, ignored_ptr);
-
-	int ret;
-	if((ret = setsid()) < 0) { //failed to become session leader
-		LH_ERROR_SE("setsid");
-		return ret;
-	}
-	setpgid(0, 0);
-	signal(SIGCHLD, SIG_IGN);
-	signal(SIGHUP, SIG_IGN);
-
-	if((ret = execv(argv[0], argv)) < 0){
+	
+	ptrace(PTRACE_TRACEME, 0, 0, 0);
+	
+	if((ret = execve(argv[0], argv, envp)) < 0){
 		LH_ERROR_SE("execv");
 		return ret;
 	}
 
-	#endif
 	return ret;
 }
 
-#ifndef LH_PRELOAD
 int main(int argc, char *argv[]){
 	return needle_main(argc, argv);
 }
-#endif
 
 int needle_main(int argc, char *argv[]) {
 	int i;
@@ -188,22 +163,44 @@ int needle_main(int argc, char *argv[]) {
 			} else {
 				char *args = strdup(argv[g_optind_exe]);
 				char *tok = strtok(args, " ");
-				int ntok = 0;
 				if(!tok || access(tok, F_OK) < 0){
 					LH_ERROR("Executable '%s' does not exist!", tok);
 					return EXIT_FAILURE;
 				}
 
-				while(tok){
-					if(!prog_argv)
-						prog_argv = calloc(sizeof(char *), ntok + 1);
-					else
-						prog_argv = realloc(prog_argv, sizeof(char *) * (ntok + 1));
-					prog_argv[ntok++] = strdup(tok);
-
-					tok = strtok(NULL, " ");
+				
+				char *needle_exe  = readlink_safe("/proc/self/exe");
+				char *needle_dirn = lh_dirname(needle_exe);
+						
+				int opt_args = g_optind_exe + 2;
+				opt_args += argc - (g_optind_exe + 1);
+				
+				//freed by lh_free
+				prog_argv = calloc(opt_args, sizeof(char *));
+				
+				int child_arg_index = 0;
+				
+				prog_argv[child_arg_index++] = strdup(tok);
+				for(int i=1; i<g_optind_exe; i++){
+					prog_argv[child_arg_index++] = argv[i];
 				}
-				session->proc.prog_argc = ntok;
+				
+				for(int i=g_optind_exe + 1; i<argc; i++){
+					prog_argv[child_arg_index++] = argv[i];
+				}			
+				prog_argv[child_arg_index++] = "--";
+				
+				while((tok = strtok(NULL, " ")) != NULL){
+					prog_argv[child_arg_index++] = strdup(tok);				
+					prog_argv = realloc(prog_argv, sizeof(char *) * (child_arg_index + 1));
+				}
+				prog_argv[child_arg_index++] = NULL;
+				
+				for(int i=0; i<child_arg_index; i++){
+					printf("=> %s\n", prog_argv[i]);
+				}
+				
+				session->proc.prog_argc = child_arg_index;
 				session->proc.prog_argv = prog_argv;
 
 				if(!args){
@@ -228,15 +225,17 @@ int needle_main(int argc, char *argv[]) {
 
 				void *stack_start = (void *)(((uintptr_t)stack_end) + rl.rlim_cur); //stack grows downwards
 
-				char *needle_exe  = readlink_safe("/proc/self/exe");
-				char *needle_dirn = lh_dirname(needle_exe);
-				asprintf(&preload_path, "%s/"LH_PRELOAD_SO, needle_dirn);
+#if defined(LH_USE_PRELOAD)
+				asprintf(&g_preload_path, "%s/"LH_PRELOAD_SO, needle_dirn);
 				free(needle_exe); free(needle_dirn);
 
-				if(access(preload_path, F_OK) < 0){
-					LH_ERROR("ERROR: '%s' missing, cannot continue!", preload_path);
+				if(access(g_preload_path, F_OK) < 0){
+					LH_ERROR("ERROR: '%s' missing, cannot continue!", g_preload_path);
 					return EXIT_FAILURE;
 				}
+				
+				session->proc.preload_path = g_preload_path;
+#endif
 
 				LH_PRINT("Launching executable '%s'", argv[g_optind_exe]);
 				#if 0
@@ -249,11 +248,37 @@ int needle_main(int argc, char *argv[]) {
 				if((g_pid = fork()) < 0){
 					LH_ERROR_SE("fork");
 					return EXIT_FAILURE;
-				} else if(g_pid == 0){
+				} else if(g_pid == 0){ //child
 					runProc(prog_argv);
+				} else {
+					int status = 0;
+					int rc;
+					if ((rc = ptrace(PTRACE_SETOPTIONS, g_pid, NULL, (void*)PTRACE_O_TRACEEXEC)) < 0 -1){
+						LH_ERROR_SE("ptrace");
+						break;
+					}
+					/*
+					LH_PRINT("Waiting for SIGTRAP...");
+					do {
+						if((rc = waitpid(g_pid, &status, 0)) < 0){
+							LH_ERROR_SE("waitpid");
+							break;
+						}
+					} while(!(WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP));
+					*/
+					LH_PRINT("Waiting for SIGSTOP...");
+					if((rc = waitpid(g_pid, &status, WSTOPPED)) < 0){
+						LH_ERROR_SE("waitpid");
+						break;
+					}
+					
+					LH_VERBOSE(2, "Child stopped due to signal: %s", strsignal(WSTOPSIG(status)));
+					
+					if(rc < 0)
+						break;
 				}
 				#endif
-				session->proc.preload_path = preload_path;
+
 				LH_PRINT("Process launched! PID: %d", g_pid);
 
 				session->proc.exename = strdup(prog_argv[0]);
@@ -261,15 +286,7 @@ int needle_main(int argc, char *argv[]) {
 			}
 		}
 
-		/*while(1){
-			LH_PRINT("Waiting for %d ...", g_pid);
-			if(kill(g_pid, 0) < 0)
-				continue;
-			break;
-		}*/
-
 		//start tracking the pid specified by the user
-
 		if (LH_SUCCESS != (re = lh_attach(session, g_pid)))
 			break;
 

@@ -105,10 +105,17 @@ do { \
 		LD_LIB_FIND_FN_ADDR("dlclose", lh->fn_dlclose, lib_dl);
 		LD_LIB_FIND_FN_ADDR("dlsym", lh->fn_dlsym, lib_dl);
 		LD_LIB_FIND_FN_ADDR("dlerror", lh->fn_dlerror, lib_dl);
-	} else {
+	} else if(c_found) {
 		LD_LIB_FIND_FN_ADDR(SYM_DLOPEN_MODE, lh->fn_dlopen, lib_c);
 		LD_LIB_FIND_FN_ADDR(SYM_DLCLOSE, lh->fn_dlclose, lib_c);
 		LD_LIB_FIND_FN_ADDR(SYM_DLSYM, lh->fn_dlsym, lib_c);
+	} else {
+		LH_ERROR("Couldn't find libc or libdl in memory map");
+		char *cmd;
+		asprintf(&cmd, "cat /proc/%zu/maps", lh->proc.pid);
+		system(cmd);
+		free(cmd);
+		return -1;
 	}
 /*
 // TODO:
@@ -465,23 +472,27 @@ int lh_attach(lh_session_t * session, pid_t pid) {
 	do {
 		session->proc.pid = pid;
 
+#if 0
 		if(session->started_by_needle){
 			// wait for wrapped main to raise SIGSTOP
 			if(inj_wait(session->proc.pid) != LH_SUCCESS)
 				break;
 			LH_VERBOSE(3, "Process stopped, attaching...");
 		}
+#endif
 
-		LH_VERBOSE(1, "Attaching to pid %d", pid);
-		if (ptrace(PTRACE_ATTACH, pid, NULL, NULL) < 0) {
-			LH_ERROR_SE("ptrace attach");
-			re = -2;
-			break;
+		if(!session->started_by_needle){		
+			LH_VERBOSE(1, "Attaching to pid %d", pid);
+			if (ptrace(PTRACE_ATTACH, pid, NULL, NULL) < 0) {
+				LH_ERROR_SE("ptrace attach");
+				re = -2;
+				break;
+			}
+			
+			LH_VERBOSE(2, "Waiting...");
+			if (LH_SUCCESS != inj_wait(session->proc.pid))
+				break;
 		}
-
-		LH_VERBOSE(2, "Waiting...");
-		if (LH_SUCCESS != inj_wait(session->proc.pid))
-			break;
 
 		if (LH_SUCCESS != (re = inj_process(session)))
 			break;

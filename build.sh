@@ -243,7 +243,7 @@ if [ -z $CONF_ARCH ]; then
 			ok "i386 detected"
 			CONF_ARCH="i386"
 			;;
-		armv5*)
+		armv5*|arm*)
 			ok "arm v5 detected"
 			CONF_ARCH="armv5"
 			;;

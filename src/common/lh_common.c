@@ -6,6 +6,7 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include "lh_common.h"
 
 int lh_verbose = 0;
