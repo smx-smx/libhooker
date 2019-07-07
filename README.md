@@ -25,6 +25,7 @@ can build it just typing make in the root directory.
 
 To hook functions, you need to define a hook_settings symbol like this:
 
+```c
 lh_hook_t hook_settings = {
   // version of the structure. currently supported: 1
   .version = 1, 
@@ -93,3 +94,4 @@ lh_hook_t hook_settings = {
     }
   }
 };
+```
