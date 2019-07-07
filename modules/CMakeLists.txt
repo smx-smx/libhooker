@@ -1,0 +1,3 @@
+add_subdirectory(sample)
+add_subdirectory(sample_asm)
+add_subdirectory(sample_sljit)

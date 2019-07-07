@@ -1,0 +1,15 @@
+add_library(lh_ifcpu cpu_common.c)
+target_link_libraries(lh_ifcpu lh_common)
+
+if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
+	add_subdirectory(arm)
+	target_link_libraries(lh_ifcpu libcpu_arm)
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^mips")
+	add_subdirectory(mips)
+	target_link_libraries(lh_ifcpu libcpu_mips)
+else()
+	add_subdirectory(intel)
+	target_link_libraries(lh_ifcpu libcpu_intel)
+endif()
+
+add_subdirectory(sljit)
