@@ -14,7 +14,7 @@ this package.
 
 After your module is ready, you can load it into a running process using
 the needle tool:
-./bin/needle -v 4 `pidof process_to_inject_to` bin/lhm_sample.so
+``./bin/needle -v 4 `pidof process_to_inject_to` bin/lhm_sample.so``
 
 And thats all.
 
@@ -52,6 +52,12 @@ lh_hook_t hook_settings = {
           //    you can specify its base address (the absolute
           //    address will be calculated based on the base
           //    address of the code section)
+          //  LHM_FN_HOOK_BY_AOBSCAN:
+          //    the function to be hooked will be specified based on a pattern
+          //    the location of the first match is taken as the hook address
+          //    required parameters:
+          //    .aob_size    -> sizeof(pattern)
+          //    .aob_pattern -> { 0xDE, 0xAD, 0xBE, 0xFF } the pattern to look for
           .hook_kind = LHM_FN_HOOK_BY_NAME,
 
           // name of the library to be hooked, for example libc.so
@@ -70,22 +76,13 @@ lh_hook_t hook_settings = {
           .orig_function_ptr = (uintptr_t) &original_test_function,
 
           // how many opcode bytes you want to restore
-          // since opcodes have different size on some platforms 
-          // like x64, and cutting an opcode into half would
-          // cause segfaults/invalid instruction errors
-          // you need to check the original function in a disassembler
-          // first and set this value to full size of the overwritten
-          // opcodes.
+          // it can be automatically determined on x86/x64
           //
           // With relative jump we overwrite:
           //   ARM: 4 bytes
-          //   x64: 5 bytes
-          //  i386: 5 bytes
           //
           // With absolute jump we overwrite:
           //   ARM: 8 bytes
-          //   x64: 14 bytes
-          //  i386: 6 bytes
           .opcode_bytes_to_restore = 8
     },
     {
