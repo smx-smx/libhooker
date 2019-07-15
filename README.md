@@ -92,3 +92,7 @@ lh_hook_t hook_settings = {
   }
 };
 ```
+
+Credits
+-----------------
+Big thanks to `foobaro`, an anonymous guy that wrote the preliminar version of libhooker and handed it to me.
