@@ -4,18 +4,27 @@
 
 void (*original_test_function) (int a, char *b);
 
-void hooked_autoinit_post(lh_main_process_t * proc) {
+void hooked_autoinit_post(lh_r_process_t * proc) {
 	LH_PRINT("This function is called after the wanted functions are hooked.");
 }
 
-int hooked_autoinit(lh_main_process_t * proc, char *tty) {
-
+int hooked_autoinit(int argc, char **argv) {
+	lh_r_process_t *proc = lh_get_procinfo(argc, argv);
 	original_test_function = NULL;
 
+	LH_PRINT("");
+	LH_PRINT("");
+	LH_PRINT("");
 	LH_PRINT("This function is intended to autorun at each time being injected to an executable.");
-	LH_PRINT("At this time, we were injected into: %u (%s)", proc->pid, proc->exename);
-	LH_PRINT("TTY: %s", tty);
-
+	LH_PRINT("At this time, we were injected into: %u (%s)", proc->pid, proc->prog_argv[0]);
+	LH_PRINT("TTY: %s", argv[1]);
+	LH_PRINT("Arguments: %d", argc);
+	int i;
+	for(i=0; i<argc; i++)
+		LH_PRINT("Arg %d => %s", i, argv[i]);
+	LH_PRINT("");
+	LH_PRINT("");
+	LH_PRINT("");
 	return LH_SUCCESS;
 }
 
@@ -29,7 +38,7 @@ int hooked_otherfunction(int a, char *s) {
 int hooked_testfunction(int a, char *s) {
 	LH_PRINT("We are in the hooked test function! %d %s", a, s);
 
-	LH_PRINT("Lets call the original one with new parameters: " LX, original_test_function);
+	LH_PRINT("Lets call the original one with new parameters @0x" LX, original_test_function);
 
 	original_test_function(12345, "_____________________ IS THERE ANYBODY IN THERE?");
 
@@ -46,7 +55,7 @@ lh_hook_t hook_settings = {
 	{
 		{
 			.hook_kind = LHM_FN_HOOK_BY_NAME,
-			.libname = "",	// means the fn symbol should be defined in the main executable
+			.libname = "",	// hook the main executable
 			.symname = "otherfunction",
 			.hook_fn = (uintptr_t) hooked_otherfunction,
 			.orig_function_ptr = 0,
@@ -54,7 +63,7 @@ lh_hook_t hook_settings = {
 #if __x86_64__
 			.opcode_bytes_to_restore = 5
 #elif __i386__
-			.opcode_bytes_to_restore = 7
+			.opcode_bytes_to_restore = 9
 #elif __arm__
 			.opcode_bytes_to_restore = 8
 #endif
@@ -70,7 +79,7 @@ lh_hook_t hook_settings = {
 #if __x86_64__
 			.opcode_bytes_to_restore = 5
 #elif __i386__
-			.opcode_bytes_to_restore = 7
+			.opcode_bytes_to_restore = 9
 #elif __arm__
 			.opcode_bytes_to_restore = 8
 #endif

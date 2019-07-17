@@ -71,6 +71,7 @@ inline int inj_trap(pid_t pid, struct user *iregs) {
 	LH_VERBOSE(3, "Copying Null to stack.");
 	return inj_pokedata(pid, lh_rget_sp(iregs), nullcode);
 }
+
 int inj_pass_args2func(pid_t pid, struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2) {
 	LH_VERBOSE(3, "function address is: 0x" LX, fn);
 	iregs->regs.rsi = arg2;
@@ -95,6 +96,14 @@ inline void lh_rset_sp(struct user *r, uintptr_t value) {
 
 inline uintptr_t lh_rget_sp(struct user *r) {
 	return r->regs.rsp;
+}
+
+inline void lh_rset_fp(struct user *r, uintptr_t value) {
+	r->regs.rbp = value;
+}
+
+inline uintptr_t lh_rget_fp(struct user *r) {
+	return r->regs.rbp;
 }
 
 inline void lh_rset_ax(struct user *r, uintptr_t value) {
@@ -178,12 +187,13 @@ int inj_pass_args2func(pid_t pid, struct user *iregs, uintptr_t fn, uintptr_t ar
 	int rc;
 
 	LH_VERBOSE(3, "function address is: 0x" LX, fn);
+	LH_VERBOSE(3, "Stack Pointer is: 0x" LX "\n", lh_rget_sp(iregs));
 
 	LH_VERBOSE(3, "Copying Arg 1 to stack.");
-	if ((rc = inj_pokedata(pid, lh_rget_sp(iregs) + sizeof(size_t), arg1)) != LH_SUCCESS)
+	if ((rc = inj_pokedata(pid, lh_rget_sp(iregs) + sizeof(uintptr_t), arg1)) != LH_SUCCESS)
 		return rc;
 	LH_VERBOSE(3, "Copying Arg 2 to stack.");
-	if ((rc = inj_pokedata(pid, lh_rget_sp(iregs) + 2 * sizeof(size_t), arg2)) != LH_SUCCESS)
+	if ((rc = inj_pokedata(pid, lh_rget_sp(iregs) + 2 * sizeof(uintptr_t), arg2)) != LH_SUCCESS)
 		return rc;
 
 	lh_rset_ip(iregs, fn);
@@ -206,6 +216,14 @@ inline void lh_rset_sp(struct user *r, uintptr_t value) {
 
 inline uintptr_t lh_rget_sp(struct user *r) {
 	return r->regs.esp;
+}
+
+inline void lh_rset_fp(struct user *r, uintptr_t value) {
+	r->regs.ebp = value;
+}
+
+inline uintptr_t lh_rget_fp(struct user *r) {
+	return r->regs.ebp;
 }
 
 inline void lh_rset_ax(struct user *r, uintptr_t value) {
@@ -414,6 +432,14 @@ inline void lh_rset_sp(struct user *r, uintptr_t value) {
 
 inline uintptr_t lh_rget_sp(struct user *r) {
 	return r->regs.uregs[13];
+}
+
+inline void lh_rset_fp(struct user *r, uintptr_t value) {
+	r->regs.uregs[11] = value;
+}
+
+inline uintptr_t lh_rget_fp(struct user *r) {
+	return r->regs.uregs[11];
 }
 
 inline void lh_rset_ax(struct user *r, uintptr_t value) {

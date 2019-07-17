@@ -15,10 +15,8 @@
 
 #    define LH_LIB_MAX 128
 
-extern char *g_tty;
-
 typedef struct {
-	lh_main_process_t proc;
+	lh_r_process_t proc;
 
 	struct user original_regs;
 
@@ -50,13 +48,16 @@ int inj_build_abs_jump(unsigned char *buffer, uintptr_t jump_destination, uintpt
 int inj_absjmp_opcode_bytes();
 
 int inj_trap(pid_t pid, struct user *iregs);
-int inj_pass_args2func(struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2);
+int inj_pass_args2func(pid_t pid, struct user *iregs, uintptr_t fn, uintptr_t arg1, uintptr_t arg2);
 
 void lh_rset_ip(struct user *r, uintptr_t value);
 uintptr_t lh_rget_ip(struct user *r);
 
 void lh_rset_sp(struct user *r, uintptr_t value);
 uintptr_t lh_rget_sp(struct user *r);
+
+void lh_rset_fp(struct user *r, uintptr_t value);
+uintptr_t lh_rget_fp(struct user *r);
 
 void lh_rset_ax(struct user *r, uintptr_t value);
 uintptr_t lh_rget_ax(struct user *r);

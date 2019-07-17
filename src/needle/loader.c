@@ -363,12 +363,12 @@ int ld_find_library(struct ld_procmaps *maps, const size_t mapnum, const char *l
 			}
 			if (found) {
 				LH_VERBOSE(2, "Found index (" LU ") matching.", idx);
-				LH_VERBOSE(1, "Found entry %s matching %s", pm->pathname, libpath);
+				LH_VERBOSE(1, "Found entry '%s' matching '%s'", pm->pathname, libpath);
 				break;
 			}
 		}
 		if (!found) {
-			LH_VERBOSE(1, "Library %s not found in procmaps", libpath);
+			LH_VERBOSE(1, "Library '%s' not found in procmaps", libpath);
 			return -1;
 		}
 		if (found && lib) {

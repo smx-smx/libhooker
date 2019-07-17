@@ -60,6 +60,23 @@ int lh_get_stdout(char *tty){
 	return -1;
 }
 
+lh_r_process_t *lh_get_procinfo(int argc, char **argv){
+	uintptr_t hdr = (uintptr_t)argv;
+
+	uint32_t hdrSz = *(uint32_t *)(hdr + (sizeof(char *) * argc));
+	printf("hdrSz: %zu\n", hdrSz);
+
+	lh_r_process_t *proc = (lh_r_process_t *)(hdr + hdrSz);
+	if(strncmp(proc->magic, "LHFO", sizeof(proc->magic)) != 0) //check the magic
+		return NULL;
+
+	/*proc->argv = argv;
+	proc->prog_argv = (char **)(hdr + (sizeof(char *) * argc) + sizeof(hdrSz));*/
+
+	lh_hexdump("hdr", proc, sizeof(*proc));
+	return proc;
+}
+
 void lh_print(int verbose, int newline, char *fn, int lineno, const char *fmt, ...) {
 
 #ifndef DEBUG
@@ -118,4 +135,26 @@ void lh_hexdump(char *desc, void *addr, int len) {
 
 	// And print the final ASCII bit.
 	fprintf(stderr, "  %s\n", buff);
+}
+
+char *readlink_safe(char *path){
+	size_t bufferSize = 1;
+	char *buf = calloc(1, bufferSize);
+	if(!buf){
+		LH_ERROR_SE("Not enough memory");
+		return NULL;
+	}
+	while(1){
+		int c = readlink(path, buf, bufferSize);
+		if(c < 0){
+			LH_ERROR_SE("readlink");
+			return NULL;
+		} else if(c == bufferSize) {
+			buf = realloc(buf, bufferSize+1);
+			memset(buf+(bufferSize++), 0x0, 1);
+			continue;
+		} else {
+			return buf;
+		}
+	}
 }

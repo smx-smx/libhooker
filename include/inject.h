@@ -65,6 +65,11 @@ struct ld_procmaps {
 	uintptr_t mmap_end;
 };
 
+int inj_peekdata(pid_t pid, uintptr_t src_in_remote, uintptr_t *outpeek);
+int inj_copydata(pid_t pid, uintptr_t target, const unsigned char *data, size_t datasz);
+void *inj_blowdata(pid_t pid, uintptr_t src_in_remote, size_t datasz);
+int inj_pokedata(pid_t pid, uintptr_t destaddr, uintptr_t data);
+
 struct elf_symbol *exe_load_symbols(const char *filename, size_t * sym_count, uintptr_t * entry_point, struct elf_interp *interp, enum elf_bit *is64);
 
 struct ld_procmaps *ld_load_maps(pid_t pid, size_t * num);
