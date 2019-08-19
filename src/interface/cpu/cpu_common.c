@@ -117,6 +117,7 @@ int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz){
 			i += opSz;
 		return i;
 	} else { //dynamic opcode size
+#if defined(__i386__) || defined(__x86_64__)
 		int totalBytes = 0;
 		int total_insn = inj_getinsn_count(codePtr, payloadSz, &totalBytes);
 		if(total_insn <= 0 || totalBytes == 0)
@@ -127,6 +128,9 @@ int inj_getbackup_size(uint8_t *codePtr, size_t codeSz, size_t payloadSz){
 			LH_PRINT("VALID: %d  REQUIRED: %d", totalBytes, payloadSz);
 		}
 		return totalBytes;
+#else
+		return -1;
+#endif
 	}
 	//return -1;
 }

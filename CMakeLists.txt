@@ -4,11 +4,14 @@ project(libhooker)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake-modules/")
-if(NOT CAPSTONE_INCLUDE_DIRS AND NOT CAPSTONE_LIBRARIES)
-	find_package(CAPSTONE REQUIRED)
-endif()
+if(LH_INTEL)
+	set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake-modules/")
+	if(NOT CAPSTONE_INCLUDE_DIRS AND NOT CAPSTONE_LIBRARIES)
+		find_package(CAPSTONE REQUIRED)
+	endif()
 include_directories(${CAPSTONE_INCLUDE_DIRS})
+endif()
+
 include_directories(include)
 
 if(NOT CMAKE_BUILD_TYPE)
