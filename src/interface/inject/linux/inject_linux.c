@@ -181,21 +181,44 @@ static int inj_set_regs(pid_t pid, const struct user *regs) {
 }
 
 /*
+ * Continues execution of a paused process
+ */
+static int inj_exec(pid_t pid) {
+	if (ptrace(PTRACE_CONT, pid, NULL, NULL) < 0) {
+		LH_ERROR_SE("Ptrace Continue failed");
+		return -1;
+	}
+	return LH_SUCCESS;
+}
+
+/*
  * Waits for a trap or termination signal
  */
 static int inj_wait(pid_t pid) {
 	int status = 0;
 	pid_t proc_pid;
-	while ((proc_pid=waitpid(pid, &status, __WALL | WUNTRACED)) != pid && proc_pid >= 0){
-		LH_VERBOSE(3, "Skipping process '%d'", proc_pid);
+	uint signo;
+	while(1){
+		while ((proc_pid=waitpid(pid, &status, __WALL | WUNTRACED)) != pid && proc_pid >= 0){
+			LH_VERBOSE(3, "Skipping process '%d'", proc_pid);
+		}
+		signo = WSTOPSIG(status);
+		LH_VERBOSE(3, "Got Signal: %u (%s)", signo, strsignal(signo));
+		
+		if(signo == SIGUSR1 || signo == SIGUSR2 || signo >= SIGRTMIN){
+			inj_exec(pid); 
+		} else {
+			break;
+		}
 	}
+	
 	if (proc_pid < 0) {
 		LH_ERROR("Waitpid failed");
 		return -1;
 	}
 	if (WIFEXITED(status) || WIFSIGNALED(status)) {
-		int signo = WTERMSIG(status);
-		LH_ERROR("Process was terminated by signal (%s)", strsignal(signo));
+		signo = WTERMSIG(status);
+		LH_ERROR("Process was terminated by signal %u (%s)", signo, strsignal(signo));
 		return -1;
 	}
 	return LH_SUCCESS;
@@ -439,17 +462,6 @@ static int inj_process(lh_session_t * lh) {
 
 	} while (0);
 	return rc;
-}
-
-/*
- * Continues execution of a paused process
- */
-static int inj_exec(pid_t pid) {
-	if (ptrace(PTRACE_CONT, pid, NULL, NULL) < 0) {
-		LH_ERROR_SE("Ptrace Continue failed");
-		return -1;
-	}
-	return LH_SUCCESS;
 }
 
 /*
