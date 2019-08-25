@@ -4,7 +4,12 @@ project(libhooker)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-if(LH_INTEL)
+include (CheckSymbolExists)
+check_symbol_exists("__arm__" "" LH_ARM)
+check_symbol_exists("__x86_64__" "" LH_AMD64)
+check_symbol_exists("__i386__" "" LH_X86)
+
+if(LH_X86 OR LH_AMD64)
 	set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake-modules/")
 	if(NOT CAPSTONE_INCLUDE_DIRS AND NOT CAPSTONE_LIBRARIES)
 		find_package(CAPSTONE REQUIRED)
@@ -35,8 +40,9 @@ else()
 endif()
 
 include (CheckIncludeFiles)
-CHECK_INCLUDE_FILES(alloca.h HAVE_ALLOCA_H)
-CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
+check_include_files(alloca.h HAVE_ALLOCA_H)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 
 # GCC or Clang
 add_definitions(-include ${CMAKE_CURRENT_BINARY_DIR}/config.h)

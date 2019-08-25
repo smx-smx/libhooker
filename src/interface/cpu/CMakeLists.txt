@@ -11,7 +11,7 @@ if(LH_MIPS)
 	target_link_libraries(lh_ifcpu libcpu_mips)
 endif()
 
-if(LH_INTEL)
+if(LH_X86 OR LH_AMD64)
 	add_subdirectory(intel)
 	target_link_libraries(lh_ifcpu libcpu_intel)
 endif()
