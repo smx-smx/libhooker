@@ -19,20 +19,21 @@ static char pyProgramName[255];
 //#define REDIRECT_STDOUT
 
 int hook_main(int argc, char **argv) {
-	lh_get_stdout(argv[1]);
+	lh_r_process_t *rproc = lh_get_procinfo(argc, argv);
+	lh_get_stdout(rproc->ttyName);
 
 	lh_printf("argc: %d\n", argc);
 
 	bool redirectStdOut = false;
-	if(argc > 5){
-		lh_printf("enableRedirection: %s\n", argv[5]);
-		if(*argv[5] == 'y'){
+	if(argc > 4){
+		lh_printf("enableRedirection: %s\n", argv[4]);
+		if(*argv[4] == 'y'){
 			redirectStdOut = true;
 		}
 	}
 
 	if(redirectStdOut){
-		int ptyFd = open(argv[1], O_WRONLY);
+		int ptyFd = open(rproc->ttyName, O_WRONLY);
 		if(ptyFd <= 0){
 			lh_printf("Failed to open PTY\n");
 		} else {
@@ -45,11 +46,11 @@ int hook_main(int argc, char **argv) {
 		}
 	}
 
-	char *pyLibrary = argv[2];
-	char *pyPrefix = argv[3];
+	char *pyLibrary = argv[1];
+	char *pyPrefix = argv[2];
 	/*char *pyLibsPath = argv[3];
 	char *pyHome = argv[4];*/
-	char *pyScript = argv[4];
+	char *pyScript = argv[3];
 
 	lh_printf("HELLO WORLD\n");
 	lh_printf("Python Prefix: %s\n", pyPrefix);

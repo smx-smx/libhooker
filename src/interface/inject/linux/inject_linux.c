@@ -509,6 +509,16 @@ int lh_attach(lh_session_t * session, pid_t pid) {
 		if (LH_SUCCESS != (re = inj_process(session)))
 			break;
 
+		//obtain the current tty name
+		//TODO: handle pipes (could use FIFOs)
+		char *cur_tty = ttyname(0);
+		if(!cur_tty){
+			LH_ERROR("Couldn't obtain current tty!");
+		} else {
+			LH_PRINT("Running on TTY: %s", cur_tty);
+			session->proc.ttyName = cur_tty;
+		}
+		
 		// make a copy of the registers at attach time and store them in the session
 		if (LH_SUCCESS != (re = inj_get_regs(pid, &(session->original_regs))))
 			break;
@@ -784,6 +794,8 @@ void inj_find_mmap(lh_session_t * lh, struct user *iregs, struct ld_procmaps *li
 	sizeof(uint32_t) + \
 	(sizeof(char *) * lh->proc.prog_argc) + \
 	/* exename */ \
+	sizeof(char *) + \
+	/* ttyName */ \
 	sizeof(char *)
 
 lh_r_process_t *lh_rproc_gen(lh_session_t *lh){
@@ -801,7 +813,7 @@ uintptr_t *r_allocs = NULL;
 
 uintptr_t inj_rproc(lh_session_t *lh, struct user *iregs){
 	uintptr_t r_procmem = 0;
-	r_allocs = calloc(sizeof(uintptr_t), lh->proc.argc + lh->proc.prog_argc + 1);
+	r_allocs = calloc(sizeof(uintptr_t), lh->proc.argc + lh->proc.prog_argc + 2);
 	uintptr_t r_str;
 
 	size_t r_procSz = 0;
@@ -883,12 +895,26 @@ uintptr_t inj_rproc(lh_session_t *lh, struct user *iregs){
 			return 0;
 	}
 
+	LH_VERBOSE(2, "Copying exename...");
 	if((r_str = inj_strcpy_alloc(lh, iregs, lh->proc.exename)) == 0)
 		return 0;
 	r_allocs[n_alloc++] = r_str;
 	rproc->exename = (char *)(r_str);
 	if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
 		return 0;
+	
+	strBlkOff += sizeof(char *);
+	
+	if(lh->proc.ttyName != NULL){
+		LH_VERBOSE(2, "Copying ttyName...");
+		if((r_str = inj_strcpy_alloc(lh, iregs, lh->proc.ttyName)) == 0)
+			return 0;
+		r_allocs[n_alloc++] = r_str;
+		rproc->ttyName = (char *)(r_str);
+		if(inj_ptrcpy(lh, r_procmem + strBlkOff, r_str) != LH_SUCCESS)
+			return 0;
+
+	}
 
 	LH_VERBOSE(2, "Copying lh_r_process_t to target...");
 	if (inj_copydata(lh->proc.pid, r_procmem + r_strBlkSz, (uint8_t *)rproc, sizeof(lh_r_process_t)) != LH_SUCCESS)

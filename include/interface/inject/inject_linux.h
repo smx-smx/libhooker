@@ -30,6 +30,7 @@ PACK(typedef struct {
 
 	struct ld_procmaps lib;
 	char *exename;
+	char *ttyName;
 	char *preload_path;
 }) lh_r_process_t;
 

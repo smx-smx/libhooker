@@ -291,13 +291,6 @@ int needle_main(int argc, char *argv[]) {
 			break;
 
 
-		//obtain the current tty name
-		//TODO: handle pipes (could use FIFOs)
-		char *cur_tty = ttyname(0);
-		if(!cur_tty){
-			return EXIT_FAILURE;
-		}
-		LH_PRINT("Running on TTY: %s", cur_tty);
 		char *libpath = realpath(argv[g_optind_lib], NULL);
 		if(!libpath){
 			LH_ERROR_SE("realpath");
@@ -305,15 +298,13 @@ int needle_main(int argc, char *argv[]) {
 		}
 
 
-		//don't subtract 1 because we need tty name
-		//add 1 because we need the module name
-		int argp = argc - g_optind_lib + 1;
+		int argp = argc - g_optind_lib;
 
 		//create and prepare module arguments
 		char **mod_argv = calloc(1, sizeof(char *) * argp);
+
 		argp = 0;
 		mod_argv[argp++] = strdup(libpath);
-		mod_argv[argp++] = strdup(cur_tty);
 
 		int i;
 		for (i = g_optind_lib + 1; i < argc; i++) {

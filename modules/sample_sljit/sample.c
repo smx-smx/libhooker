@@ -91,7 +91,6 @@ int hooked_autoinit(int argc, char **argv) {
 	if(proc){
 		LH_PRINT("At this time, we were injected into: %u (%s)", proc->pid, proc->prog_argv[0]);
 	}
-	LH_PRINT("TTY: %s", argv[1]);
 	LH_PRINT("Arguments: %d", argc);
 	int i;
 	for(i=0; i<argc; i++)
