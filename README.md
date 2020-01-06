@@ -1,3 +1,9 @@
+# NOTE
+## libhooker has been simplified and adapted on top of a newly built injector, with a simplified codebase.
+## Follow the new developments here: https://github.com/smx-smx/ezinject
+
+
+
 What is libhooker
 -----------------
 The libhooker project is a multiplatform binary instrumentation framework.
